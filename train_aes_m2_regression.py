@@ -1,5 +1,5 @@
-"Training script for Automated Essay Scoring (AES) using Tiny Recursive Models (Regression)
-Optimized for Mac Studio M2 Ultra with 192GB RAM"
+"""Training script for Automated Essay Scoring (AES) using Tiny Recursive Models (Regression)
+Optimized for Mac Studio M2 Ultra with 192GB RAM"""
 
 import os
 import sys
