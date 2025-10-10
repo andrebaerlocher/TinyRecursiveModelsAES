@@ -80,7 +80,7 @@ class AESTrainer:
         # EMA
         self.use_ema = config.get("ema", True)
         if self.use_ema:
-            self.ema_helper = EMAHelper(mu=config.get("ema_rate", 0.999), device=device)
+            self.ema_helper = EMAHelper(mu=config.get("ema_rate", 0.999))
             self.ema_helper.register(self.model)
 
         # Training state
