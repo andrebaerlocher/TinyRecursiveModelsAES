@@ -87,14 +87,17 @@ class AESTrainer:
         self.step = 0
         self.best_qwk = -1.0
         self.carry = None
+        self.early_stopping_counter = 0
+        self.early_stopping_patience = config.get("early_stopping_patience", 5)
 
         # Wandb logging
         self.use_wandb = config.get("use_wandb", False)
         if self.use_wandb:
             wandb.init(
-                project=config.get("project_name", "TinyRecursiveModels-AES"),
+                project=config.get("project_name", "TRM-AES"),
                 name=config.get("run_name", None),
                 config=config,
+                entity=config.get("entity_name", "andre-baerlocher-lehrmittelverlag-st-gallen"),
             )
 
     def train_epoch(self) -> Dict[str, float]:
@@ -235,9 +238,17 @@ class AESTrainer:
                     self.best_qwk = eval_metrics["qwk"]
                     self.save_checkpoint("best_model_m2.pt")
                     print(f"Saved new best model (QWK: {self.best_qwk:.4f})")
+                    self.early_stopping_counter = 0
+                else:
+                    self.early_stopping_counter += 1
+                    print(f"QWK did not improve. Early stopping counter: {self.early_stopping_counter}/{self.early_stopping_patience}")
+
+                if self.early_stopping_counter >= self.early_stopping_patience:
+                    print("Early stopping triggered.")
+                    break
 
             # Save periodic checkpoint
-            if (epoch + 1) % 1000 == 0:
+            if (epoch + 1) % 10 == 0:
                 self.save_checkpoint(f"checkpoint_epoch_{epoch+1}_m2.pt")
 
     def save_checkpoint(self, filename: str):
@@ -311,8 +322,9 @@ def main():
     parser.add_argument(
         "--use-wandb", action="store_true", help="Use Weights & Biases logging"
     )
-    parser.add_argument("--project-name", type=str, default="TinyRecursiveModels-AES-M2")
+    parser.add_argument("--project-name", type=str, default="TRM-AES")
     parser.add_argument("--run-name", type=str, default=None, help="Run name for wandb")
+    parser.add_argument("--early-stopping-patience", type=int, default=5, help="Patience for early stopping")
 
     args = parser.parse_args()
 
@@ -429,6 +441,8 @@ def main():
         "use_wandb": args.use_wandb,
         "project_name": args.project_name,
         "run_name": args.run_name,
+        "early_stopping_patience": args.early_stopping_patience,
+        "entity_name": "andre-baerlocher-lehrmittelverlag-st-gallen",
         "model_config": model_config
     }
 
