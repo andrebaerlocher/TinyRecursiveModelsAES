@@ -19,7 +19,10 @@ import wandb
 from puzzle_dataset import PuzzleDataset, PuzzleDatasetConfig
 from evaluators.aes_evaluator import AESEvaluator, AESEvaluatorConfig
 from models.ema import EMAHelper
-from models.recursive_reasoning.trm_regression import TinyRecursiveReasoningModel_ACTV1_Regression
+from models.recursive_reasoning.trm_regression import (
+    TinyRecursiveReasoningModel_ACTV1_Regression,
+)
+
 
 def get_device():
     """Get the best available device for M2 Mac"""
@@ -38,6 +41,7 @@ def set_seed(seed: int):
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
 
+
 class MSELossWrapper(nn.Module):
     def __init__(self, model):
         super().__init__()
@@ -48,17 +52,17 @@ class MSELossWrapper(nn.Module):
         return self.model.initial_carry(batch)
 
     def forward(self, carry, batch, return_keys=[]):
-        carry, outputs = self.model(carry, batch) 
-        
+        carry, outputs = self.model(carry, batch)
+
         # Ensure labels are float for MSE loss
-        labels = batch['labels'].float()
-        
-        loss = self.loss_fn(outputs['prediction'].squeeze(), labels.squeeze())
-        
+        labels = batch["labels"].float()
+
+        loss = self.loss_fn(outputs["prediction"].squeeze(), labels.squeeze())
+
         # The rest of the returned values are for compatibility with the trainer
         metrics = {}
         all_finish = carry.halted.all()
-        
+
         return carry, loss, metrics, outputs, all_finish
 
 
@@ -117,7 +121,9 @@ class AESTrainer:
                 project=config.get("project_name", "TRM-AES-Regression"),
                 name=config.get("run_name", None),
                 config=config,
-                entity=config.get("entity_name", "andre-baerlocher-lehrmittelverlag-st-gallen"),
+                entity=config.get(
+                    "entity_name", "andre-baerlocher-lehrmittelverlag-st-gallen"
+                ),
             )
 
     def train_epoch(self) -> Dict[str, float]:
@@ -138,8 +144,10 @@ class AESTrainer:
                     self.carry = self.model.initial_carry(batch)
 
             # Forward pass
-            self.carry, loss, metrics, _, _ = self.model(carry=self.carry, batch=batch, return_keys=[])
-            loss = loss / self.model_config['batch_size']
+            self.carry, loss, metrics, _, _ = self.model(
+                carry=self.carry, batch=batch, return_keys=[]
+            )
+            loss = loss / self.model_config["batch_size"]
 
             # Backward pass
             self.optimizer.zero_grad()
@@ -181,7 +189,7 @@ class AESTrainer:
 
         self.model.eval()
         self.evaluator.reset()
-        
+
         eval_carry = None
 
         for set_name, batch, global_batch_size in tqdm(
@@ -189,7 +197,7 @@ class AESTrainer:
         ):
             # Move to device
             batch = {k: v.to(self.device) for k, v in batch.items()}
-            
+
             if eval_carry is None:
                 with torch.device(self.device):
                     eval_carry = self.model.initial_carry(batch)
@@ -201,9 +209,13 @@ class AESTrainer:
                 )
                 if all_finish:
                     break
-            
+
             # Add to evaluator
-            self.evaluator.add_batch(preds['prediction'], batch['labels'], batch.get("puzzle_identifiers", None))
+            self.evaluator.add_batch(
+                preds["prediction"],
+                batch["labels"],
+                batch.get("puzzle_identifiers", None),
+            )
 
         # Compute metrics
         metrics = self.evaluator.compute_metrics()
@@ -261,7 +273,9 @@ class AESTrainer:
                     self.early_stopping_counter = 0
                 else:
                     self.early_stopping_counter += 1
-                    print(f"QWK did not improve. Early stopping counter: {self.early_stopping_counter}/{self.early_stopping_patience}")
+                    print(
+                        f"QWK did not improve. Early stopping counter: {self.early_stopping_counter}/{self.early_stopping_patience}"
+                    )
 
                 if self.early_stopping_counter >= self.early_stopping_patience:
                     print("Early stopping triggered.")
@@ -273,7 +287,9 @@ class AESTrainer:
 
     def save_checkpoint(self, filename: str):
         """Save model checkpoint"""
-        checkpoint_dir = self.config.get("checkpoint_path", "checkpoints/aes_m2_regression")
+        checkpoint_dir = self.config.get(
+            "checkpoint_path", "checkpoints/aes_m2_regression"
+        )
         os.makedirs(checkpoint_dir, exist_ok=True)
 
         checkpoint_path = os.path.join(checkpoint_dir, filename)
@@ -301,7 +317,7 @@ def main():
     parser.add_argument(
         "--data-path",
         type=str,
-        nargs='+',
+        nargs="+",
         required=True,
         help="Path(s) to processed dataset directory",
     )
@@ -321,9 +337,7 @@ def main():
     parser.add_argument(
         "--num_heads", type=int, default=8, help="Number of attention heads"
     )
-    parser.add_argument(
-        "--L_layers", type=int, default=2, help="Number of L layers"
-    )
+    parser.add_argument("--L_layers", type=int, default=2, help="Number of L layers")
     parser.add_argument(
         "--H_cycles", type=int, default=3, help="Number of high-level reasoning cycles"
     )
@@ -345,9 +359,18 @@ def main():
     )
     parser.add_argument("--project-name", type=str, default="TRM-AES-Regression")
     parser.add_argument("--run-name", type=str, default=None, help="Run name for wandb")
-    parser.add_argument("--early-stopping-patience", type=int, default=5, help="Patience for early stopping")
-    parser.add_argument("--halt-threshold", type=float, default=0.5, help="ACT halt threshold for regression")
-
+    parser.add_argument(
+        "--early-stopping-patience",
+        type=int,
+        default=5,
+        help="Patience for early stopping",
+    )
+    parser.add_argument(
+        "--halt-threshold",
+        type=float,
+        default=0.5,
+        help="ACT halt threshold for regression",
+    )
 
     args = parser.parse_args()
 
@@ -400,8 +423,11 @@ def main():
     print(f"  Total puzzles: {metadata.total_puzzles}")
     print(f"  Number of puzzle identifiers: {metadata.num_puzzle_identifiers}")
 
-    # Load dataset metadata for score info
-    with open(os.path.join(args.data_path, "train", "dataset.json"), "r") as f:
+    # Load dataset metadata for score info (use first path if multiple provided)
+    first_data_path = (
+        args.data_path[0] if isinstance(args.data_path, list) else args.data_path
+    )
+    with open(os.path.join(first_data_path, "train", "dataset.json"), "r") as f:
         dataset_info = json.load(f)
 
     min_score = dataset_info.get("min_score", 0)
@@ -412,7 +438,7 @@ def main():
 
     # Create model
     print("Creating model...")
-    
+
     model_config = {
         "batch_size": args.batch_size,
         "seq_len": metadata.seq_len,
@@ -421,7 +447,7 @@ def main():
         "vocab_size": metadata.vocab_size,
         "H_cycles": args.H_cycles,
         "L_cycles": args.L_cycles,
-        "H_layers": 1, # Not used in TRM
+        "H_layers": 1,  # Not used in TRM
         "L_layers": args.L_layers,
         "hidden_.size": args.hidden_size,
         "expansion": args.expansion,
@@ -430,7 +456,7 @@ def main():
         "halt_max_steps": 10,
         "halt_exploration_prob": 0.1,
         "halt_threshold": args.halt_threshold,
-        "forward_dtype": "float32"
+        "forward_dtype": "float32",
     }
 
     model = TinyRecursiveReasoningModel_ACTV1_Regression(model_config)
@@ -445,7 +471,7 @@ def main():
             score_bins=score_bins,
         )
     )
-    
+
     # Create config for trainer
     config = {
         "data_path": args.data_path,
@@ -467,7 +493,7 @@ def main():
         "run_name": args.run_name,
         "early_stopping_patience": args.early_stopping_patience,
         "entity_name": "andre-baerlocher-lehrmittelverlag-st-gallen",
-        "model_config": model_config
+        "model_config": model_config,
     }
 
     # Create trainer
