@@ -1,4 +1,4 @@
-data/asappp_prompts_1-2
+data/asappp_prompts_*
 dataset/__pycache__
 __pycache__
 evaluators/__pycache__
