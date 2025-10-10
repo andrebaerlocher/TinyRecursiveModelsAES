@@ -116,7 +116,7 @@ class CrossEntropyLoss(nn.Module):
         labels = new_carry.current_data["labels"]
 
         # Compute loss
-        loss = F.cross_entropy(logits.view(-1, logits.shape[-1]), labels.view(-1), ignore_index=self.ignore_index)
+        loss = F.cross_entropy(logits.reshape(-1, logits.shape[-1]), labels.reshape(-1), ignore_index=self.ignore_index)
 
         # Prepare metrics
         with torch.no_grad():
