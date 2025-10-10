@@ -66,6 +66,7 @@ def build_dataset_prompts_1_2(output_dir: str, num_aug: int = 1, max_length: int
         group_indices = [0]
 
         current_example_idx = 0
+        kept_essay_idx = 0
         filtered_count = 0
 
         for idx, example in enumerate(tqdm(dataset)):
@@ -97,13 +98,14 @@ def build_dataset_prompts_1_2(output_dir: str, num_aug: int = 1, max_length: int
 
                 inputs_list.append(input_seq)
                 labels_list.append(label_seq)
-                puzzle_identifiers.append(idx)  # Group by original essay
+                puzzle_identifiers.append(kept_essay_idx)  # Group by kept essay index
 
                 current_example_idx += 1
                 puzzle_indices.append(current_example_idx)
 
             # Each essay is its own group
-            group_indices.append(idx + 1)
+            group_indices.append(kept_essay_idx + 1)
+            kept_essay_idx += 1
 
         print(f"Filtered out {filtered_count} essays longer than {max_length} characters.")
 
@@ -134,7 +136,7 @@ def build_dataset_prompts_1_2(output_dir: str, num_aug: int = 1, max_length: int
             "blank_identifier_id": BLANK_IDENTIFIER_ID,
             "vocab_size": CHAR_VOCAB_SIZE,
             "seq_len": max_length,
-            "num_puzzle_identifiers": len(puzzle_identifiers),
+            "num_puzzle_identifiers": len(np.unique(puzzle_identifiers)),
             "total_groups": len(group_indices) - 1,
             "mean_puzzle_examples": num_aug,
             "total_puzzles": len(dataset) - filtered_count,
@@ -175,6 +177,7 @@ def build_dataset_prompts_3_6(output_dir: str, num_aug: int = 1, max_length: int
         group_indices = [0]
 
         current_example_idx = 0
+        kept_essay_idx = 0
         filtered_count = 0
 
         for idx, example in enumerate(tqdm(dataset)):
@@ -204,12 +207,13 @@ def build_dataset_prompts_3_6(output_dir: str, num_aug: int = 1, max_length: int
 
                 inputs_list.append(input_seq)
                 labels_list.append(label_seq)
-                puzzle_identifiers.append(idx)
+                puzzle_identifiers.append(kept_essay_idx)
 
                 current_example_idx += 1
                 puzzle_indices.append(current_example_idx)
 
-            group_indices.append(idx + 1)
+            group_indices.append(kept_essay_idx + 1)
+            kept_essay_idx += 1
 
         print(f"Filtered out {filtered_count} essays longer than {max_length} characters.")
 
@@ -240,7 +244,7 @@ def build_dataset_prompts_3_6(output_dir: str, num_aug: int = 1, max_length: int
             "blank_identifier_id": BLANK_IDENTIFIER_ID,
             "vocab_size": CHAR_VOCAB_SIZE,
             "seq_len": max_length,
-            "num_puzzle_identifiers": len(puzzle_identifiers),
+            "num_puzzle_identifiers": len(np.unique(puzzle_identifiers)),
             "total_groups": len(group_indices) - 1,
             "mean_puzzle_examples": num_aug,
             "total_puzzles": len(dataset) - filtered_count,
@@ -281,6 +285,7 @@ def build_dataset_prompt_7(output_dir: str, num_aug: int = 1, max_length: int = 
         group_indices = [0]
 
         current_example_idx = 0
+        kept_essay_idx = 0
         filtered_count = 0
 
         for idx, example in enumerate(tqdm(dataset)):
@@ -309,12 +314,13 @@ def build_dataset_prompt_7(output_dir: str, num_aug: int = 1, max_length: int = 
 
                 inputs_list.append(input_seq)
                 labels_list.append(label_seq)
-                puzzle_identifiers.append(idx)
+                puzzle_identifiers.append(kept_essay_idx)
 
                 current_example_idx += 1
                 puzzle_indices.append(current_example_idx)
 
-            group_indices.append(idx + 1)
+            group_indices.append(kept_essay_idx + 1)
+            kept_essay_idx += 1
 
         print(f"Filtered out {filtered_count} essays longer than {max_length} characters.")
 
@@ -345,7 +351,7 @@ def build_dataset_prompt_7(output_dir: str, num_aug: int = 1, max_length: int = 
             "blank_identifier_id": BLANK_IDENTIFIER_ID,
             "vocab_size": CHAR_VOCAB_SIZE,
             "seq_len": max_length,
-            "num_puzzle_identifiers": len(puzzle_identifiers),
+            "num_puzzle_identifiers": len(np.unique(puzzle_identifiers)),
             "total_groups": len(group_indices) - 1,
             "mean_puzzle_examples": num_aug,
             "total_puzzles": len(dataset) - filtered_count,
