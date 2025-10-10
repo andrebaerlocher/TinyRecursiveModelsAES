@@ -24,6 +24,7 @@ from models.ema import EMAHelper
 from models.recursive_reasoning.trm import TinyRecursiveReasoningModel_ACTV1
 from models.losses import CrossEntropyLoss
 
+
 def get_device():
     """Get the best available device for M2 Mac"""
     if torch.backends.mps.is_available():
@@ -97,7 +98,9 @@ class AESTrainer:
                 project=config.get("project_name", "TRM-AES"),
                 name=config.get("run_name", None),
                 config=config,
-                entity=config.get("entity_name", "andre-baerlocher-lehrmittelverlag-st-gallen"),
+                entity=config.get(
+                    "entity_name", "andre-baerlocher-lehrmittelverlag-st-gallen"
+                ),
             )
 
     def train_epoch(self) -> Dict[str, float]:
@@ -118,8 +121,10 @@ class AESTrainer:
                     self.carry = self.model.initial_carry(batch)
 
             # Forward pass
-            self.carry, loss, metrics, _, _ = self.model(carry=self.carry, batch=batch, return_keys=[])
-            loss = loss / self.model_config['batch_size']
+            self.carry, loss, metrics, _, _ = self.model(
+                carry=self.carry, batch=batch, return_keys=[]
+            )
+            loss = loss / self.model_config["batch_size"]
 
             # Backward pass
             self.optimizer.zero_grad()
@@ -161,7 +166,7 @@ class AESTrainer:
 
         self.model.eval()
         self.evaluator.reset()
-        
+
         eval_carry = None
 
         for set_name, batch, global_batch_size in tqdm(
@@ -169,7 +174,7 @@ class AESTrainer:
         ):
             # Move to device
             batch = {k: v.to(self.device) for k, v in batch.items()}
-            
+
             if eval_carry is None:
                 with torch.device(self.device):
                     eval_carry = self.model.initial_carry(batch)
@@ -181,9 +186,11 @@ class AESTrainer:
                 )
                 if all_finish:
                     break
-            
+
             # Add to evaluator
-            self.evaluator.add_batch(preds['logits'], batch['labels'], batch.get("puzzle_identifiers", None))
+            self.evaluator.add_batch(
+                preds["logits"], batch["labels"], batch.get("puzzle_identifiers", None)
+            )
 
         # Compute metrics
         metrics = self.evaluator.compute_metrics()
@@ -241,7 +248,9 @@ class AESTrainer:
                     self.early_stopping_counter = 0
                 else:
                     self.early_stopping_counter += 1
-                    print(f"QWK did not improve. Early stopping counter: {self.early_stopping_counter}/{self.early_stopping_patience}")
+                    print(
+                        f"QWK did not improve. Early stopping counter: {self.early_stopping_counter}/{self.early_stopping_patience}"
+                    )
 
                 if self.early_stopping_counter >= self.early_stopping_patience:
                     print("Early stopping triggered.")
@@ -288,7 +297,7 @@ def main():
         "--batch-size", type=int, default=64, help="Batch size (default: 64)"
     )
     parser.add_argument(
-        "--epochs", type=int, default=1000, help="Number of epochs (default: 1000)"
+        "--epochs", type=int, default=100, help="Number of epochs (default: 100)"
     )
     parser.add_argument("--lr", type=float, default=3e-4, help="Learning rate")
     parser.add_argument(
@@ -300,9 +309,7 @@ def main():
     parser.add_argument(
         "--num_heads", type=int, default=8, help="Number of attention heads"
     )
-    parser.add_argument(
-        "--L_layers", type=int, default=2, help="Number of L layers"
-    )
+    parser.add_argument("--L_layers", type=int, default=2, help="Number of L layers")
     parser.add_argument(
         "--H_cycles", type=int, default=3, help="Number of high-level reasoning cycles"
     )
@@ -324,7 +331,12 @@ def main():
     )
     parser.add_argument("--project-name", type=str, default="TRM-AES")
     parser.add_argument("--run-name", type=str, default=None, help="Run name for wandb")
-    parser.add_argument("--early-stopping-patience", type=int, default=5, help="Patience for early stopping")
+    parser.add_argument(
+        "--early-stopping-patience",
+        type=int,
+        default=5,
+        help="Patience for early stopping",
+    )
 
     args = parser.parse_args()
 
@@ -389,7 +401,7 @@ def main():
 
     # Create model
     print("Creating model...")
-    
+
     model_config = {
         "batch_size": args.batch_size,
         "seq_len": metadata.seq_len,
@@ -398,7 +410,7 @@ def main():
         "vocab_size": metadata.vocab_size,
         "H_cycles": args.H_cycles,
         "L_cycles": args.L_cycles,
-        "H_layers": 1, # Not used in TRM
+        "H_layers": 1,  # Not used in TRM
         "L_layers": args.L_layers,
         "hidden_size": args.hidden_size,
         "expansion": args.expansion,
@@ -406,7 +418,7 @@ def main():
         "pos_encodings": "rope",
         "halt_max_steps": 10,
         "halt_exploration_prob": 0.1,
-        "forward_dtype": "float32"
+        "forward_dtype": "float32",
     }
 
     model = TinyRecursiveReasoningModel_ACTV1(model_config)
@@ -421,7 +433,7 @@ def main():
             score_bins=score_bins,
         )
     )
-    
+
     # Create config for trainer
     config = {
         "data_path": args.data_path,
@@ -443,7 +455,7 @@ def main():
         "run_name": args.run_name,
         "early_stopping_patience": args.early_stopping_patience,
         "entity_name": "andre-baerlocher-lehrmittelverlag-st-gallen",
-        "model_config": model_config
+        "model_config": model_config,
     }
 
     # Create trainer

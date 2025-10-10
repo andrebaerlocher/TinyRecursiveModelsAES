@@ -301,8 +301,9 @@ def main():
     parser.add_argument(
         "--data-path",
         type=str,
+        nargs='+',
         required=True,
-        help="Path to processed dataset directory",
+        help="Path(s) to processed dataset directory",
     )
     parser.add_argument(
         "--batch-size", type=int, default=64, help="Batch size (default: 64)"
