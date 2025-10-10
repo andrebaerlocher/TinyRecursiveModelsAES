@@ -149,9 +149,11 @@ def build_dataset_prompts_3_6(output_dir: str, num_aug: int = 1):
     """Build dataset for ASAPPP prompts 3-6"""
     print("Loading ASAPPP prompts 3-6 from HuggingFace...")
 
-    # Load train and test splits
-    train_ds = load_dataset("llm-aes/asappp-3-6-original", split="train")
-    test_ds = load_dataset("llm-aes/asappp-3-6-original", split="test")
+    # Load dataset and split into train and test
+    dataset = load_dataset("llm-aes/asappp-3-6-original", split="train")
+    dataset_splits = dataset.train_test_split(test_size=0.1, seed=42)
+    train_ds = dataset_splits["train"]
+    test_ds = dataset_splits["test"]
 
     # Score range for prompts 3-6 is 0-4 (domain1_score)
     min_score, max_score = 0, 4
@@ -246,9 +248,11 @@ def build_dataset_prompt_7(output_dir: str, num_aug: int = 1):
     """Build dataset for ASAPPP prompt 7"""
     print("Loading ASAPPP prompt 7 from HuggingFace...")
 
-    # Load train and test splits
-    train_ds = load_dataset("llm-aes/asap-7-original", split="train")
-    test_ds = load_dataset("llm-aes/asap-7-original", split="test")
+    # Load dataset and split into train and test
+    dataset = load_dataset("llm-aes/asap-7-original", split="train")
+    dataset_splits = dataset.train_test_split(test_size=0.1, seed=42)
+    train_ds = dataset_splits["train"]
+    test_ds = dataset_splits["test"]
 
     # Score range for prompt 7 is 2-24 (domain1_score)
     min_score, max_score = 2, 24

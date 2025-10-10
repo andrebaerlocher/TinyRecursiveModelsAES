@@ -1,7 +1,5 @@
-"""
-Training script for Automated Essay Scoring (AES) using Tiny Recursive Models
-Optimized for Mac Studio M2 Ultra with 192GB RAM
-"""
+"Training script for Automated Essay Scoring (AES) using Tiny Recursive Models (Regression)
+Optimized for Mac Studio M2 Ultra with 192GB RAM"
 
 import os
 import sys
@@ -21,8 +19,7 @@ import wandb
 from puzzle_dataset import PuzzleDataset, PuzzleDatasetConfig
 from evaluators.aes_evaluator import AESEvaluator, AESEvaluatorConfig
 from models.ema import EMAHelper
-from models.recursive_reasoning.trm import TinyRecursiveReasoningModel_ACTV1
-from models.losses import CrossEntropyLoss
+from models.recursive_reasoning.trm_regression import TinyRecursiveReasoningModel_ACTV1_Regression
 
 def get_device():
     """Get the best available device for M2 Mac"""
@@ -40,6 +37,29 @@ def set_seed(seed: int):
     np.random.seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
+
+class MSELossWrapper(nn.Module):
+    def __init__(self, model):
+        super().__init__()
+        self.model = model
+        self.loss_fn = nn.MSELoss()
+
+    def initial_carry(self, batch):
+        return self.model.initial_carry(batch)
+
+    def forward(self, carry, batch, return_keys=[]):
+        carry, outputs = self.model(carry, batch) 
+        
+        # Ensure labels are float for MSE loss
+        labels = batch['labels'].float()
+        
+        loss = self.loss_fn(outputs['prediction'].squeeze(), labels.squeeze())
+        
+        # The rest of the returned values are for compatibility with the trainer
+        metrics = {}
+        all_finish = carry.halted.all()
+        
+        return carry, loss, metrics, outputs, all_finish
 
 
 class AESTrainer:
@@ -94,7 +114,7 @@ class AESTrainer:
         self.use_wandb = config.get("use_wandb", False)
         if self.use_wandb:
             wandb.init(
-                project=config.get("project_name", "TRM-AES"),
+                project=config.get("project_name", "TRM-AES-Regression"),
                 name=config.get("run_name", None),
                 config=config,
                 entity=config.get("entity_name", "andre-baerlocher-lehrmittelverlag-st-gallen"),
@@ -183,7 +203,7 @@ class AESTrainer:
                     break
             
             # Add to evaluator
-            self.evaluator.add_batch(preds['logits'], batch['labels'], batch.get("puzzle_identifiers", None))
+            self.evaluator.add_batch(preds['prediction'], batch['labels'], batch.get("puzzle_identifiers", None))
 
         # Compute metrics
         metrics = self.evaluator.compute_metrics()
@@ -236,7 +256,7 @@ class AESTrainer:
                 # Save best model
                 if eval_metrics["qwk"] > self.best_qwk:
                     self.best_qwk = eval_metrics["qwk"]
-                    self.save_checkpoint("best_model_m2.pt")
+                    self.save_checkpoint("best_model_m2_regression.pt")
                     print(f"Saved new best model (QWK: {self.best_qwk:.4f})")
                     self.early_stopping_counter = 0
                 else:
@@ -249,11 +269,11 @@ class AESTrainer:
 
             # Save periodic checkpoint
             if (epoch + 1) % 10 == 0:
-                self.save_checkpoint(f"checkpoint_epoch_{epoch+1}_m2.pt")
+                self.save_checkpoint(f"checkpoint_epoch_{epoch+1}_m2_regression.pt")
 
     def save_checkpoint(self, filename: str):
         """Save model checkpoint"""
-        checkpoint_dir = self.config.get("checkpoint_path", "checkpoints/aes_m2")
+        checkpoint_dir = self.config.get("checkpoint_path", "checkpoints/aes_m2_regression")
         os.makedirs(checkpoint_dir, exist_ok=True)
 
         checkpoint_path = os.path.join(checkpoint_dir, filename)
@@ -276,7 +296,7 @@ class AESTrainer:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Train Tiny Recursive Model for AES on M2 Mac"
+        description="Train Tiny Recursive Model for AES (Regression) on M2 Mac"
     )
     parser.add_argument(
         "--data-path",
@@ -315,16 +335,18 @@ def main():
     parser.add_argument(
         "--checkpoint-path",
         type=str,
-        default="checkpoints/aes_m2",
+        default="checkpoints/aes_m2_regression",
         help="Checkpoint directory",
     )
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument(
         "--use-wandb", action="store_true", help="Use Weights & Biases logging"
     )
-    parser.add_argument("--project-name", type=str, default="TRM-AES")
+    parser.add_argument("--project-name", type=str, default="TRM-AES-Regression")
     parser.add_argument("--run-name", type=str, default=None, help="Run name for wandb")
     parser.add_argument("--early-stopping-patience", type=int, default=5, help="Patience for early stopping")
+    parser.add_argument("--halt-threshold", type=float, default=0.5, help="ACT halt threshold for regression")
+
 
     args = parser.parse_args()
 
@@ -400,17 +422,18 @@ def main():
         "L_cycles": args.L_cycles,
         "H_layers": 1, # Not used in TRM
         "L_layers": args.L_layers,
-        "hidden_size": args.hidden_size,
+        "hidden_.size": args.hidden_size,
         "expansion": args.expansion,
         "num_heads": args.num_heads,
         "pos_encodings": "rope",
         "halt_max_steps": 10,
         "halt_exploration_prob": 0.1,
+        "halt_threshold": args.halt_threshold,
         "forward_dtype": "float32"
     }
 
-    model = TinyRecursiveReasoningModel_ACTV1(model_config)
-    model = CrossEntropyLoss(model, ignore_index=-100)
+    model = TinyRecursiveReasoningModel_ACTV1_Regression(model_config)
+    model = MSELossWrapper(model)
 
     # Create evaluator
     evaluator = AESEvaluator(
