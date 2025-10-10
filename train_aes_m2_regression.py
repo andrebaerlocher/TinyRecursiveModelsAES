@@ -362,7 +362,7 @@ def main():
     train_dataset = PuzzleDataset(
         PuzzleDatasetConfig(
             seed=args.seed,
-            dataset_paths=[args.data_path],
+            dataset_paths=args.data_path,
             global_batch_size=args.batch_size,
             test_set_mode=False,
             epochs_per_iter=1,
@@ -375,7 +375,7 @@ def main():
     test_dataset = PuzzleDataset(
         PuzzleDatasetConfig(
             seed=args.seed,
-            dataset_paths=[args.data_path],
+            dataset_paths=args.data_path,
             global_batch_size=args.batch_size,
             test_set_mode=True,
             epochs_per_iter=1,
