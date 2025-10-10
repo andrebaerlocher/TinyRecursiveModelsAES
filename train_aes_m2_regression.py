@@ -449,7 +449,7 @@ def main():
         "L_cycles": args.L_cycles,
         "H_layers": 1,  # Not used in TRM
         "L_layers": args.L_layers,
-        "hidden_.size": args.hidden_size,
+        "hidden_size": args.hidden_size,
         "expansion": args.expansion,
         "num_heads": args.num_heads,
         "pos_encodings": "rope",
