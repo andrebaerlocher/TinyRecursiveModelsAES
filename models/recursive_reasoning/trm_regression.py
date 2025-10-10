@@ -276,7 +276,7 @@ class TinyRecursiveReasoningModel_ACTV1_Regression(nn.Module):
             if self.training and (self.config.halt_max_steps > 1):
 
                 # Halt signal based on regression tolerance
-                halted = halted | (torch.abs(prediction.squeeze() - new_current_data['labels'].squeeze()) < self.config.halt_threshold)
+                halted = halted | (torch.abs(prediction.squeeze() - new_current_data['labels'].squeeze()[:, 0]) < self.config.halt_threshold)
 
                 # Exploration
                 min_halt_steps = (torch.rand_like(q_halt_logits) < self.config.halt_exploration_prob) * torch.randint_like(new_steps, low=2, high=self.config.halt_max_steps + 1)

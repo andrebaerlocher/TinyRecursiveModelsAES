@@ -57,7 +57,7 @@ class MSELossWrapper(nn.Module):
         # Ensure labels are float for MSE loss
         labels = batch["labels"].float()
 
-        loss = self.loss_fn(outputs["prediction"].squeeze(), labels.squeeze())
+        loss = self.loss_fn(outputs["prediction"].squeeze(), labels.squeeze()[:, 0])
 
         # The rest of the returned values are for compatibility with the trainer
         metrics = {}
