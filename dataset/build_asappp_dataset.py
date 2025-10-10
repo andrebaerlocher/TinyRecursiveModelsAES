@@ -17,7 +17,6 @@ IGNORE_LABEL_ID = -100
 BLANK_IDENTIFIER_ID = 0
 
 # Tokenization parameters
-MAX_ESSAY_LENGTH = 512  # Maximum number of characters per essay
 CHAR_VOCAB_SIZE = 256  # ASCII character set
 
 
@@ -33,7 +32,7 @@ def denormalize_score(normalized: float, min_score: int, max_score: int) -> int:
     return int(round(normalized * (max_score - min_score) + min_score))
 
 
-def tokenize_essay(essay: str, max_length: int = MAX_ESSAY_LENGTH) -> np.ndarray:
+def tokenize_essay(essay: str, max_length: int) -> np.ndarray:
     """Convert essay text to character-level token IDs"""
     # Convert to bytes and take first max_length characters
     tokens = [min(ord(c), CHAR_VOCAB_SIZE - 1) for c in essay[:max_length]]
@@ -43,7 +42,7 @@ def tokenize_essay(essay: str, max_length: int = MAX_ESSAY_LENGTH) -> np.ndarray
     return np.array(tokens, dtype=np.int32)
 
 
-def build_dataset_prompts_1_2(output_dir: str, num_aug: int = 1):
+def build_dataset_prompts_1_2(output_dir: str, num_aug: int = 1, max_length: int = 1500):
     """Build dataset for ASAPPP prompts 1-2"""
     print("Loading ASAPPP prompts 1-2 from HuggingFace...")
 
@@ -67,11 +66,16 @@ def build_dataset_prompts_1_2(output_dir: str, num_aug: int = 1):
         group_indices = [0]
 
         current_example_idx = 0
+        filtered_count = 0
 
         for idx, example in enumerate(tqdm(dataset)):
             essay = example["essay"]
             score = example["domain1_score"]
             essay_set = example["essay_set"]
+
+            if len(essay) > max_length:
+                filtered_count += 1
+                continue
 
             # Normalize score to [0, 1]
             normalized_score = normalize_score(score, min_score, max_score)
@@ -79,14 +83,14 @@ def build_dataset_prompts_1_2(output_dir: str, num_aug: int = 1):
             # Apply augmentation (simple: just repeat the example)
             for aug_idx in range(num_aug):
                 # Tokenize essay
-                essay_tokens = tokenize_essay(essay, MAX_ESSAY_LENGTH)
+                essay_tokens = tokenize_essay(essay, max_length)
 
                 # Create input: essay tokens
                 input_seq = essay_tokens
 
                 # Create label: normalized score (as single value, repeated for sequence)
                 # We'll use the last token position for the prediction
-                label_seq = np.full(MAX_ESSAY_LENGTH, IGNORE_LABEL_ID, dtype=np.int32)
+                label_seq = np.full(max_length, IGNORE_LABEL_ID, dtype=np.int32)
                 # Put score at the last position (discretized into bins)
                 score_bin = int(normalized_score * (score_bins - 1))
                 label_seq[-1] = score_bin
@@ -100,6 +104,8 @@ def build_dataset_prompts_1_2(output_dir: str, num_aug: int = 1):
 
             # Each essay is its own group
             group_indices.append(idx + 1)
+
+        print(f"Filtered out {filtered_count} essays longer than {max_length} characters.")
 
         # Convert to numpy arrays
         inputs = np.array(inputs_list, dtype=np.int32)
@@ -127,11 +133,11 @@ def build_dataset_prompts_1_2(output_dir: str, num_aug: int = 1):
             "ignore_label_id": IGNORE_LABEL_ID,
             "blank_identifier_id": BLANK_IDENTIFIER_ID,
             "vocab_size": CHAR_VOCAB_SIZE,
-            "seq_len": MAX_ESSAY_LENGTH,
+            "seq_len": max_length,
             "num_puzzle_identifiers": len(puzzle_identifiers),
             "total_groups": len(group_indices) - 1,
             "mean_puzzle_examples": num_aug,
-            "total_puzzles": len(dataset),
+            "total_puzzles": len(dataset) - filtered_count,
             "sets": ["all"],
             "min_score": min_score,
             "max_score": max_score,
@@ -145,7 +151,7 @@ def build_dataset_prompts_1_2(output_dir: str, num_aug: int = 1):
         print(f"Saved {split_name} split: {len(inputs)} examples")
 
 
-def build_dataset_prompts_3_6(output_dir: str, num_aug: int = 1):
+def build_dataset_prompts_3_6(output_dir: str, num_aug: int = 1, max_length: int = 1500):
     """Build dataset for ASAPPP prompts 3-6"""
     print("Loading ASAPPP prompts 3-6 from HuggingFace...")
 
@@ -169,11 +175,16 @@ def build_dataset_prompts_3_6(output_dir: str, num_aug: int = 1):
         group_indices = [0]
 
         current_example_idx = 0
+        filtered_count = 0
 
         for idx, example in enumerate(tqdm(dataset)):
             essay = example["essay"]
             score = example["domain1_score"]
             essay_set = example["essay_set"]
+
+            if len(essay) > max_length:
+                filtered_count += 1
+                continue
 
             # Normalize score to [0, 1]
             normalized_score = normalize_score(score, min_score, max_score)
@@ -181,13 +192,13 @@ def build_dataset_prompts_3_6(output_dir: str, num_aug: int = 1):
             # Apply augmentation
             for aug_idx in range(num_aug):
                 # Tokenize essay
-                essay_tokens = tokenize_essay(essay, MAX_ESSAY_LENGTH)
+                essay_tokens = tokenize_essay(essay, max_length)
 
                 # Create input: essay tokens
                 input_seq = essay_tokens
 
                 # Create label: normalized score
-                label_seq = np.full(MAX_ESSAY_LENGTH, IGNORE_LABEL_ID, dtype=np.int32)
+                label_seq = np.full(max_length, IGNORE_LABEL_ID, dtype=np.int32)
                 score_bin = int(normalized_score * (score_bins - 1))
                 label_seq[-1] = score_bin
 
@@ -199,6 +210,8 @@ def build_dataset_prompts_3_6(output_dir: str, num_aug: int = 1):
                 puzzle_indices.append(current_example_idx)
 
             group_indices.append(idx + 1)
+
+        print(f"Filtered out {filtered_count} essays longer than {max_length} characters.")
 
         # Convert to numpy arrays
         inputs = np.array(inputs_list, dtype=np.int32)
@@ -226,11 +239,11 @@ def build_dataset_prompts_3_6(output_dir: str, num_aug: int = 1):
             "ignore_label_id": IGNORE_LABEL_ID,
             "blank_identifier_id": BLANK_IDENTIFIER_ID,
             "vocab_size": CHAR_VOCAB_SIZE,
-            "seq_len": MAX_ESSAY_LENGTH,
+            "seq_len": max_length,
             "num_puzzle_identifiers": len(puzzle_identifiers),
             "total_groups": len(group_indices) - 1,
             "mean_puzzle_examples": num_aug,
-            "total_puzzles": len(dataset),
+            "total_puzzles": len(dataset) - filtered_count,
             "sets": ["all"],
             "min_score": min_score,
             "max_score": max_score,
@@ -244,7 +257,7 @@ def build_dataset_prompts_3_6(output_dir: str, num_aug: int = 1):
         print(f"Saved {split_name} split: {len(inputs)} examples")
 
 
-def build_dataset_prompt_7(output_dir: str, num_aug: int = 1):
+def build_dataset_prompt_7(output_dir: str, num_aug: int = 1, max_length: int = 1500):
     """Build dataset for ASAPPP prompt 7"""
     print("Loading ASAPPP prompt 7 from HuggingFace...")
 
@@ -268,10 +281,15 @@ def build_dataset_prompt_7(output_dir: str, num_aug: int = 1):
         group_indices = [0]
 
         current_example_idx = 0
+        filtered_count = 0
 
         for idx, example in enumerate(tqdm(dataset)):
             essay = example["essay"]
             score = example["domain1_score"]
+
+            if len(essay) > max_length:
+                filtered_count += 1
+                continue
 
             # Normalize score to [0, 1]
             normalized_score = normalize_score(score, min_score, max_score)
@@ -279,13 +297,13 @@ def build_dataset_prompt_7(output_dir: str, num_aug: int = 1):
             # Apply augmentation
             for aug_idx in range(num_aug):
                 # Tokenize essay
-                essay_tokens = tokenize_essay(essay, MAX_ESSAY_LENGTH)
+                essay_tokens = tokenize_essay(essay, max_length)
 
                 # Create input: essay tokens
                 input_seq = essay_tokens
 
                 # Create label: normalized score
-                label_seq = np.full(MAX_ESSAY_LENGTH, IGNORE_LABEL_ID, dtype=np.int32)
+                label_seq = np.full(max_length, IGNORE_LABEL_ID, dtype=np.int32)
                 score_bin = int(normalized_score * (score_bins - 1))
                 label_seq[-1] = score_bin
 
@@ -297,6 +315,8 @@ def build_dataset_prompt_7(output_dir: str, num_aug: int = 1):
                 puzzle_indices.append(current_example_idx)
 
             group_indices.append(idx + 1)
+
+        print(f"Filtered out {filtered_count} essays longer than {max_length} characters.")
 
         # Convert to numpy arrays
         inputs = np.array(inputs_list, dtype=np.int32)
@@ -324,11 +344,11 @@ def build_dataset_prompt_7(output_dir: str, num_aug: int = 1):
             "ignore_label_id": IGNORE_LABEL_ID,
             "blank_identifier_id": BLANK_IDENTIFIER_ID,
             "vocab_size": CHAR_VOCAB_SIZE,
-            "seq_len": MAX_ESSAY_LENGTH,
+            "seq_len": max_length,
             "num_puzzle_identifiers": len(puzzle_identifiers),
             "total_groups": len(group_indices) - 1,
             "mean_puzzle_examples": num_aug,
-            "total_puzzles": len(dataset),
+            "total_puzzles": len(dataset) - filtered_count,
             "sets": ["all"],
             "min_score": min_score,
             "max_score": max_score,
@@ -363,19 +383,25 @@ def main():
         default=1,
         help="Number of augmentations per essay (default: 1)",
     )
+    parser.add_argument(
+        "--max-length",
+        type=int,
+        default=1500,
+        help="Maximum character length for essays. Longer essays will be filtered out.",
+    )
 
     args = parser.parse_args()
 
     os.makedirs(args.output_dir, exist_ok=True)
 
     if args.prompt_set == "1-2" or args.prompt_set == "all":
-        build_dataset_prompts_1_2(args.output_dir + "_prompts_1-2", args.num_aug)
+        build_dataset_prompts_1_2(args.output_dir + "_prompts_1-2", args.num_aug, args.max_length)
 
     if args.prompt_set == "3-6" or args.prompt_set == "all":
-        build_dataset_prompts_3_6(args.output_dir + "_prompts_3-6", args.num_aug)
+        build_dataset_prompts_3_6(args.output_dir + "_prompts_3-6", args.num_aug, args.max_length)
 
     if args.prompt_set == "7" or args.prompt_set == "all":
-        build_dataset_prompt_7(args.output_dir + "_prompts_7", args.num_aug)
+        build_dataset_prompt_7(args.output_dir + "_prompts_7", args.num_aug, args.max_length)
 
     print("Dataset building complete!")
 

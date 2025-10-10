@@ -299,7 +299,7 @@ class AESTrainer:
                     break
 
             # Save periodic checkpoint
-            if (epoch + 1) % 10 == 0:
+            if (epoch + 1) % 5 == 0:
                 self.save_checkpoint(f"checkpoint_epoch_{epoch+1}_m2_regression.pt")
 
     def save_checkpoint(self, filename: str):
@@ -339,12 +339,12 @@ def main():
         help="Path(s) to processed dataset directory",
     )
     parser.add_argument(
-        "--batch-size", type=int, default=64, help="Batch size (default: 64)"
+        "--batch-size", type=int, default=8, help="Batch size (default: 8)"
     )
     parser.add_argument(
         "--epochs", type=int, default=100, help="Number of epochs (default: 100)"
     )
-    parser.add_argument("--lr", type=float, default=3e-4, help="Learning rate")
+    parser.add_argument("--lr", type=float, default=3e-5, help="Learning rate")
     parser.add_argument(
         "--hidden_size", type=int, default=512, help="Model embedding dimension"
     )

@@ -1,5 +1,5 @@
 """
-Evaluation script for trained AES models
+Evaluation script for trained AES models (Regression version)
 """
 
 import os
@@ -16,128 +16,8 @@ from tqdm import tqdm
 from puzzle_dataset import PuzzleDataset, PuzzleDatasetConfig
 from torch.utils.data import DataLoader
 from evaluators.aes_evaluator import AESEvaluator, AESEvaluatorConfig
-
-
-def get_device():
-    """Get the best available device"""
-    if torch.backends.mps.is_available():
-        return torch.device("mps")
-    elif torch.cuda.is_available():
-        return torch.device("cuda")
-    else:
-        return torch.device("cpu")
-
-
-class SimpleRecursiveModel(nn.Module):
-    """
-    Simplified Tiny Recursive Model for Essay Scoring
-    (Must match the architecture in train_aes_m1.py)
-    """
-
-    def __init__(
-        self,
-        vocab_size: int,
-        seq_len: int,
-        num_classes: int,
-        d_model: int = 128,
-        d_hidden: int = 256,
-        n_heads: int = 4,
-        n_layers: int = 2,
-        h_cycles: int = 2,
-        l_cycles: int = 3,
-        dropout: float = 0.1,
-    ):
-        super().__init__()
-
-        self.vocab_size = vocab_size
-        self.seq_len = seq_len
-        self.num_classes = num_classes
-        self.d_model = d_model
-        self.h_cycles = h_cycles
-        self.l_cycles = l_cycles
-
-        # Token embedding
-        self.token_embedding = nn.Embedding(vocab_size, d_model)
-
-        # Positional encoding
-        self.pos_encoding = nn.Parameter(torch.randn(1, seq_len, d_model) * 0.02)
-
-        # Encoder layers
-        encoder_layer = nn.TransformerEncoderLayer(
-            d_model=d_model,
-            nhead=n_heads,
-            dim_feedforward=d_hidden,
-            dropout=dropout,
-            batch_first=True,
-            norm_first=True,
-        )
-        self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=n_layers)
-
-        # Latent state
-        self.latent_init = nn.Parameter(torch.randn(1, 1, d_model) * 0.02)
-
-        # Recursive reasoning layers
-        self.latent_update = nn.TransformerEncoderLayer(
-            d_model=d_model,
-            nhead=n_heads,
-            dim_feedforward=d_hidden,
-            dropout=dropout,
-            batch_first=True,
-            norm_first=True,
-        )
-
-        # Answer update layers
-        self.answer_init = nn.Parameter(torch.randn(1, 1, d_model) * 0.02)
-        self.answer_update = nn.Linear(d_model * 2, d_model)
-
-        # Output head
-        self.output_head = nn.Sequential(
-            nn.LayerNorm(d_model),
-            nn.Linear(d_model, d_hidden),
-            nn.GELU(),
-            nn.Dropout(dropout),
-            nn.Linear(d_hidden, num_classes),
-        )
-
-        self.dropout = nn.Dropout(dropout)
-
-    def forward(self, inputs: torch.Tensor, labels: torch.Tensor = None):
-        """Forward pass with recursive reasoning"""
-        batch_size = inputs.shape[0]
-
-        # Embed tokens
-        x = self.token_embedding(inputs)
-        x = x + self.pos_encoding
-        x = self.dropout(x)
-
-        # Encode input
-        encoded = self.encoder(x)
-
-        # Initialize latent state and answer
-        latent = self.latent_init.expand(batch_size, -1, -1)
-        answer = self.answer_init.expand(batch_size, -1, -1)
-
-        # Recursive reasoning: H-cycles
-        for h in range(self.h_cycles):
-            # L-cycles: Update latent state
-            for l in range(self.l_cycles):
-                reasoning_input = torch.cat([encoded, answer, latent], dim=1)
-                latent_new = self.latent_update(reasoning_input)
-                latent = latent_new[:, -1:, :]
-
-            # Update answer based on latent state
-            answer_input = torch.cat([answer, latent], dim=-1)
-            answer = self.answer_update(answer_input)
-            answer = torch.tanh(answer)
-
-        # Generate final prediction from answer
-        logits = self.output_head(answer.squeeze(1))
-
-        # Expand logits to match sequence length format
-        logits_expanded = logits.unsqueeze(1).expand(-1, self.seq_len, -1)
-
-        return {"logits": logits_expanded, "final_logits": logits}
-
+from models.recursive_reasoning.trm_regression import TinyRecursiveReasoningModel_ACTV1_Regression
+from train_aes_m2_regression import MSELossWrapper, get_device, set_seed
 
 def load_model(checkpoint_path: str, device: torch.device) -> tuple:
     """Load model from checkpoint"""
@@ -145,31 +25,12 @@ def load_model(checkpoint_path: str, device: torch.device) -> tuple:
 
     checkpoint = torch.load(checkpoint_path, map_location=device)
     config = checkpoint["config"]
-
-    # Get model architecture from config
-    with open(os.path.join(config["data_path"], "train", "dataset.json"), "r") as f:
-        dataset_info = json.load(f)
-
-    vocab_size = dataset_info["vocab_size"]
-    seq_len = dataset_info["seq_len"]
-    score_bins = dataset_info["score_bins"]
+    model_config = config['model_config']
 
     # Create model
-    model = SimpleRecursiveModel(
-        vocab_size=vocab_size,
-        seq_len=seq_len,
-        num_classes=score_bins,
-        d_model=config.get("d_model", 128),
-        d_hidden=config.get("d_hidden", 256),
-        n_heads=config.get("n_heads", 4),
-        n_layers=config.get("n_layers", 2),
-        h_cycles=config.get("h_cycles", 2),
-        l_cycles=config.get("l_cycles", 3),
-        dropout=config.get("dropout", 0.1),
-    )
-
-    # Load weights
-    model.load_state_dict(checkpoint["model_state_dict"])
+    model = TinyRecursiveReasoningModel_ACTV1_Regression(model_config)
+    model = MSELossWrapper(model)
+    model.load_state_dict(checkpoint['model_state_dict'])
     model = model.to(device)
     model.eval()
 
@@ -177,6 +38,23 @@ def load_model(checkpoint_path: str, device: torch.device) -> tuple:
     print(f"  Parameters: {sum(p.numel() for p in model.parameters()):,}")
     print(f"  Training step: {checkpoint.get('step', 'N/A')}")
     print(f"  Best QWK: {checkpoint.get('best_qwk', 'N/A'):.4f}")
+
+    # Get dataset info from config
+    first_data_path = (
+        config['data_path'][0] if isinstance(config['data_path'], list) else config['data_path']
+    )
+    # Correct the path to dataset.json
+    if not os.path.exists(os.path.join(first_data_path, "train", "dataset.json")):
+        # If not in train, check root of data_path
+        if os.path.exists(os.path.join(first_data_path, "dataset.json')):
+             with open(os.path.join(first_data_path, "dataset.json"), "r") as f:
+                dataset_info = json.load(f)
+        else:
+            raise FileNotFoundError("dataset.json not found in train directory or data_path root.")
+    else:
+        with open(os.path.join(first_data_path, "train", "dataset.json"), "r") as f:
+            dataset_info = json.load(f)
+
 
     return model, config, dataset_info
 
@@ -191,59 +69,59 @@ def evaluate_model(
 ) -> Dict[str, Any]:
     """Evaluate model on dataset"""
     model.eval()
-    evaluator.reset()
-
-    all_predictions = []
+    
+    all_preds = []
     all_labels = []
     all_essay_ids = []
 
+    eval_carry = None
     with torch.no_grad():
         for set_name, batch, global_batch_size in tqdm(dataloader, desc="Evaluating"):
-            # Move to device
-            inputs = batch["inputs"].to(device)
-            labels = batch["labels"].to(device)
-            puzzle_identifiers = batch.get("puzzle_identifiers", None)
+            batch = {k: v.to(device) for k, v in batch.items()}
 
-            # Forward pass
-            outputs = model(inputs, labels)
-            predictions = outputs["logits"]
+            if eval_carry is None:
+                eval_carry = model.initial_carry(batch)
 
-            # Add to evaluator
-            evaluator.add_batch(predictions, labels, puzzle_identifiers)
+            while True:
+                eval_carry, _, _, preds, all_finish = model(
+                    carry=eval_carry, batch=batch, return_keys=[]
+                )
+                if all_finish:
+                    break
+            
+            predictions = preds["prediction"].squeeze()
+            labels = batch["labels"].squeeze()[:, 0]
 
-            # Save for detailed analysis if requested
-            if save_predictions:
-                pred_at_last = predictions[:, -1, :]
-                pred_classes = torch.argmax(pred_at_last, dim=-1)
-                label_classes = labels[:, -1]
+            all_preds.append(predictions.cpu().numpy())
+            all_labels.append(labels.cpu().numpy())
+            if "puzzle_identifiers" in batch:
+                all_essay_ids.append(batch["puzzle_identifiers"].cpu().numpy())
 
-                valid_mask = label_classes != -100
 
-                all_predictions.extend(pred_classes[valid_mask].cpu().numpy().tolist())
-                all_labels.extend(label_classes[valid_mask].cpu().numpy().tolist())
-                if puzzle_identifiers is not None:
-                    all_essay_ids.extend(
-                        puzzle_identifiers[valid_mask].cpu().numpy().tolist()
-                    )
+    all_preds = np.concatenate(all_preds)
+    all_labels = np.concatenate(all_labels)
+    if all_essay_ids:
+        all_essay_ids = np.concatenate(all_essay_ids)
 
-    # Compute metrics
-    metrics = evaluator.compute_metrics()
+    pred_scores = np.round(all_preds).astype(int)
+    label_scores = all_labels.astype(int)
 
-    # Save predictions if requested
+    metrics = {
+        "qwk": evaluator.compute_qwk(pred_scores, label_scores),
+        "mse": evaluator.compute_mse(all_preds, all_labels),
+        "rmse": evaluator.compute_rmse(all_preds, all_labels),
+        "accuracy": evaluator.compute_accuracy(pred_scores, label_scores),
+        "adjacent_accuracy": evaluator.compute_adjacent_accuracy(pred_scores, label_scores),
+        "num_samples": len(pred_scores),
+    }
+
     if save_predictions and output_file:
         output_data = {
-            "predictions": all_predictions,
-            "labels": all_labels,
-            "essay_ids": all_essay_ids,
+            "predictions": pred_scores.tolist(),
+            "labels": label_scores.tolist(),
+            "essay_ids": all_essay_ids.tolist() if all_essay_ids.any() else [],
             "metrics": metrics,
         }
-
-        # Convert predictions and labels to original scores
-        pred_scores = [evaluator.denormalize_score(p) for p in all_predictions]
-        label_scores = [evaluator.denormalize_score(l) for l in all_labels]
-
-        output_data["pred_scores"] = pred_scores
-        output_data["label_scores"] = label_scores
 
         os.makedirs(
             os.path.dirname(output_file) if os.path.dirname(output_file) else ".",
@@ -258,7 +136,7 @@ def evaluate_model(
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Evaluate trained AES model")
+    parser = argparse.ArgumentParser(description="Evaluate trained AES model (Regression)")
     parser.add_argument(
         "--checkpoint",
         type=str,
@@ -269,6 +147,7 @@ def main():
         "--data-path",
         type=str,
         required=True,
+        nargs='+',
         help="Path to dataset directory",
     )
     parser.add_argument(
@@ -292,25 +171,25 @@ def main():
     parser.add_argument(
         "--output-file",
         type=str,
-        default="predictions.json",
+        default="predictions_regression.json",
         help="Output file for predictions",
     )
+    parser.add_argument("--seed", type=int, default=42, help="Random seed.")
+
 
     args = parser.parse_args()
 
-    # Get device
+    set_seed(args.seed)
     device = get_device()
     print(f"Using device: {device}")
 
-    # Load model
     model, config, dataset_info = load_model(args.checkpoint, device)
 
-    # Create dataloader
     print(f"\nLoading {args.split} dataset...")
     dataset = PuzzleDataset(
         PuzzleDatasetConfig(
-            seed=42,
-            dataset_paths=[args.data_path],
+            seed=args.seed,
+            dataset_paths=args.data_path,
             global_batch_size=args.batch_size,
             test_set_mode=True,
             epochs_per_iter=1,
@@ -325,7 +204,6 @@ def main():
     print(f"✓ Dataset loaded")
     print(f"  Total samples: {dataset.metadata.total_puzzles}")
 
-    # Create evaluator
     min_score = dataset_info.get("min_score", 0)
     max_score = dataset_info.get("max_score", 12)
     score_bins = dataset_info.get("score_bins", 11)
@@ -339,7 +217,6 @@ def main():
         )
     )
 
-    # Evaluate
     print(f"\nEvaluating on {args.split} set...")
     metrics = evaluate_model(
         model=model,
@@ -350,11 +227,10 @@ def main():
         output_file=args.output_file if args.save_predictions else None,
     )
 
-    # Print results
     print("\n" + "=" * 50)
     print("Evaluation Results")
     print("=" * 50)
-    print(f"Dataset: {args.data_path}")
+    print(f"Dataset: {', '.join(args.data_path)}")
     print(f"Split: {args.split}")
     print(f"Score range: {min_score}-{max_score}")
     print(f"\nMetrics:")
@@ -366,7 +242,6 @@ def main():
     print(f"  Samples:            {metrics['num_samples']}")
     print("=" * 50)
 
-    # Interpretation
     print("\nInterpretation:")
     qwk = metrics["qwk"]
     if qwk < 0.40:
