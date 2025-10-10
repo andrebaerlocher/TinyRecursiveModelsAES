@@ -101,3 +101,34 @@ class ACTLossHead(nn.Module):
 
         return new_carry, lm_loss + 0.5 * (q_halt_loss + q_continue_loss), metrics, detached_outputs, new_carry.halted.all()
 
+class CrossEntropyLoss(nn.Module):
+    def __init__(self, model: nn.Module, ignore_index: int = -100):
+        super().__init__()
+        self.model = model
+        self.ignore_index = ignore_index
+
+    def initial_carry(self, *args, **kwargs):
+        return self.model.initial_carry(*args, **kwargs)
+
+    def forward(self, carry: Any, batch: Dict[str, torch.Tensor], return_keys: Sequence[str]) -> Tuple[Any, torch.Tensor, Dict[str, torch.Tensor], Optional[Dict[str, torch.Tensor]], torch.Tensor]:
+        new_carry, outputs = self.model(carry, batch)
+        logits = outputs["logits"]
+        labels = new_carry.current_data["labels"]
+
+        # Compute loss
+        loss = F.cross_entropy(logits.view(-1, logits.shape[-1]), labels.view(-1), ignore_index=self.ignore_index)
+
+        # Prepare metrics
+        with torch.no_grad():
+            mask = (labels != self.ignore_index)
+            preds = torch.argmax(logits, dim=-1)
+            accuracy = (preds[mask] == labels[mask]).float().mean()
+            metrics = {
+                "loss": loss.detach(),
+                "accuracy": accuracy,
+                "count": mask.sum()
+            }
+
+        detached_outputs = {k: outputs[k].detach() for k in return_keys if k in outputs}
+        
+        return new_carry, loss, metrics, detached_outputs, new_carry.halted.all()
