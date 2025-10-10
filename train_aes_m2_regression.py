@@ -357,7 +357,7 @@ def main():
     parser.add_argument(
         "--use-wandb", action="store_true", help="Use Weights & Biases logging"
     )
-    parser.add_argument("--project-name", type=str, default="TRM-AES-Regression")
+    parser.add_argument("--project-name", type=str, default="TRM-AES")
     parser.add_argument("--run-name", type=str, default=None, help="Run name for wandb")
     parser.add_argument(
         "--early-stopping-patience",
