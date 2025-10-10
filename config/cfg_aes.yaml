@@ -1,0 +1,89 @@
+# Configuration for Automated Essay Scoring (AES) with TinyRecursiveModels
+# Optimized for MacBook Pro M1 with 16GB RAM
+
+# Architecture configuration
+arch:
+  name: trm  # Tiny Recursive Model
+  loss:
+    name: cross_entropy
+
+  # Model size (reduced for M1 with 16GB RAM)
+  d_model: 128  # Embedding dimension (reduced from typical 256)
+  d_hidden: 256  # Hidden layer dimension
+  n_heads: 4  # Number of attention heads (reduced from 8)
+  dropout: 0.1
+
+  # Recursive reasoning parameters
+  L_layers: 2  # Number of latent update layers
+  H_cycles: 2  # Number of high-level reasoning cycles (reduced from 3)
+  L_cycles: 3  # Number of low-level reasoning cycles (reduced from 4)
+
+  # Positional encodings
+  pos_encodings: learned  # Options: learned, sinusoidal, none
+
+  # Use MLP or Attention for transformations
+  mlp_t: false  # false = use attention, true = use MLP
+
+  # Output configuration
+  output_type: classification  # classification for binned scores
+
+# Data paths (will be set via command line)
+data_paths:
+  - data/asappp_prompts_1-2
+
+# Test data paths (optional, defaults to data_paths)
+data_paths_test: []
+
+# Evaluators
+evaluators:
+  - name: aes
+    min_score: 2
+    max_score: 12
+    score_bins: 11
+    metric_types:
+      - qwk
+      - mse
+      - accuracy
+
+# Training hyperparameters (optimized for M1)
+global_batch_size: 16  # Reduced for 16GB RAM
+epochs: 10000
+eval_interval: 500
+min_eval_interval: 0
+
+# Learning rates
+lr: 3.0e-4  # Base learning rate
+lr_min_ratio: 0.1  # Minimum LR as ratio of base LR
+lr_warmup_steps: 1000  # Warmup steps
+
+# Optimizer parameters
+weight_decay: 0.1
+beta1: 0.9
+beta2: 0.999
+
+# Puzzle embedding (essay embedding in our case)
+puzzle_emb_lr: 3.0e-4
+puzzle_emb_weight_decay: 0.1
+
+# Model training options
+ema: true  # Use Exponential Moving Average
+ema_rate: 0.999
+freeze_weights: false  # Set to true to only train embeddings
+
+# Checkpointing
+checkpoint_every_eval: true
+checkpoint_path: checkpoints/aes
+
+# Logging
+project_name: TinyRecursiveModels-AES
+run_name: null  # Will be auto-generated if null
+
+# Evaluation
+eval_save_outputs: []  # List of set names to save outputs for
+
+# Random seed
+seed: 42
+
+# Device configuration (automatically set for M1)
+# M1 Macs will use 'mps' backend
+# If MPS is not available, will fall back to 'cpu'

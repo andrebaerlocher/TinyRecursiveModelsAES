@@ -1,20 +1,38 @@
-torch
+# Core dependencies for M1 Mac
+torch>=2.0.0
+torchvision
+torchaudio
+
+# Optimization
 adam-atan2
+
+# Utilities
 einops
 tqdm
 coolname
-pydantic
+pydantic>=2.0.0
+pydantic-core
 argdantic
 wandb
 omegaconf
 hydra-core
+
+# HuggingFace ecosystem
+datasets
 huggingface_hub
-packaging 
-ninja 
-wheel 
-setuptools 
+transformers
+
+# Data processing
+numpy
+pandas
+scikit-learn
+
+# Build tools
+packaging
+ninja
+wheel
+setuptools
 setuptools-scm
-pydantic-core
-huggingface_hub 
-numba
-triton
+
+# Note: Removed CUDA-specific packages (triton, numba with CUDA)
+# M1 Macs use Metal Performance Shaders (MPS) instead of CUDA

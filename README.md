@@ -1,8 +1,20 @@
 # Less is More: Recursive Reasoning with Tiny Networks
 
+> **🎓 AES Adaptation Available!** This repository has been adapted for Automated Essay Scoring (AES) using the ASAPPP dataset, optimized for MacBook Pro M1 with 16GB RAM. See [README_AES.md](README_AES.md) for the AES-specific documentation.
+
 This is the codebase for the paper: "Less is More: Recursive Reasoning with Tiny Networks". TRM is a recursive reasoning approach that achieves amazing scores of 45% on ARC-AGI-1 and 8% on ARC-AGI-2 using a tiny 7M parameters neural network.
 
 [Paper](https://arxiv.org/abs/2510.04871)
+
+## Repository Contents
+
+- **Original TRM Implementation**: The puzzle-solving implementation (ARC-AGI, Sudoku, Maze) as described in the paper
+- **AES Adaptation**: A new adaptation for Automated Essay Scoring using the ASAPPP dataset, optimized for Apple M1 hardware
+
+### Quick Links
+
+- **For AES (Essay Scoring)**: See [README_AES.md](README_AES.md)
+- **For Original TRM (Puzzle Solving)**: Continue reading below
 
 ### Motivation
 
