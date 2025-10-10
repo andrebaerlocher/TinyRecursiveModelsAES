@@ -8,6 +8,8 @@ import math
 from typing import Optional, List, Dict, Any
 from dataclasses import dataclass
 import argparse
+import time
+from datetime import datetime, timedelta
 
 import torch
 import torch.nn as nn
@@ -125,6 +127,7 @@ class AESTrainer:
                     "entity_name", "andre-baerlocher-lehrmittelverlag-st-gallen"
                 ),
             )
+            wandb.watch(self.model, log_freq=10)
 
     def train_epoch(self) -> Dict[str, float]:
         """Train for one epoch"""
@@ -172,7 +175,7 @@ class AESTrainer:
 
             # Log to wandb
             if self.use_wandb and self.step % 10 == 0:
-                wandb.log({"train/loss": loss.item(), "train/step": self.step})
+                wandb.log({"train/loss": loss.item()}, step=self.step)
 
         # Update scheduler
         self.scheduler.step()
@@ -236,12 +239,26 @@ class AESTrainer:
         eval_interval = self.config.get("eval_interval", 500)
         min_eval_interval = self.config.get("min_eval_interval", 0)
 
+        start_time = time.time()
+
         for epoch in range(num_epochs):
             print(f"\nEpoch {epoch + 1}/{num_epochs}")
 
             # Train
             train_metrics = self.train_epoch()
             print(f"Train Loss: {train_metrics['loss']:.4f}")
+
+            # --- Time estimation logic ---
+            elapsed_time = time.time() - start_time
+            avg_epoch_time = elapsed_time / (epoch + 1)
+            remaining_epochs = num_epochs - (epoch + 1)
+            remaining_time = remaining_epochs * avg_epoch_time
+            finish_time = datetime.now() + timedelta(seconds=remaining_time)
+
+            print(f"Average epoch time: {avg_epoch_time:.2f}s")
+            print(f"Estimated remaining time: {str(timedelta(seconds=int(remaining_time)))}")
+            print(f"Estimated finish time: {finish_time.strftime('%Y-%m-%d %H:%M:%S')}")
+            # --- End of time estimation logic ---
 
             # Evaluate
             if epoch >= min_eval_interval and (epoch + 1) % eval_interval == 0:
