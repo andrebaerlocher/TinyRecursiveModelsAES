@@ -10,14 +10,20 @@ from typing import List, Dict, Tuple
 import numpy as np
 from datasets import load_dataset
 from tqdm import tqdm
+from transformers import AutoTokenizer
 
 # Special token IDs
-PAD_ID = 0
 IGNORE_LABEL_ID = -100
 BLANK_IDENTIFIER_ID = 0
 
 # Tokenization parameters
-CHAR_VOCAB_SIZE = 256  # ASCII character set
+MAX_TOKENS = 512
+TOKENIZER_NAME = "bert-base-uncased"
+
+print(f"Loading tokenizer: {TOKENIZER_NAME}...")
+tokenizer = AutoTokenizer.from_pretrained(TOKENIZER_NAME)
+PAD_ID = tokenizer.pad_token_id
+VOCAB_SIZE = tokenizer.vocab_size
 
 
 def normalize_score(score: int, min_score: int, max_score: int) -> float:
@@ -32,29 +38,29 @@ def denormalize_score(normalized: float, min_score: int, max_score: int) -> int:
     return int(round(normalized * (max_score - min_score) + min_score))
 
 
-def tokenize_essay(essay: str, max_length: int) -> np.ndarray:
-    """Convert essay text to character-level token IDs"""
-    # Convert to bytes and take first max_length characters
-    tokens = [min(ord(c), CHAR_VOCAB_SIZE - 1) for c in essay[:max_length]]
-    # Pad to max_length
-    if len(tokens) < max_length:
-        tokens.extend([PAD_ID] * (max_length - len(tokens)))
-    return np.array(tokens, dtype=np.int32)
+def tokenize_essay(essay: str, max_length: int = MAX_TOKENS) -> np.ndarray:
+    """Convert essay text to token IDs using a transformer tokenizer."""
+    output = tokenizer(
+        essay,
+        truncation=True,
+        padding="max_length",
+        max_length=max_length,
+        return_tensors="np",
+    )
+    return output["input_ids"].squeeze()
 
 
-def build_dataset_prompts_1_2(output_dir: str, num_aug: int = 1, max_length: int = 1500):
+def build_dataset_prompts_1_2(output_dir: str, num_aug: int = 1, max_char_length: int = 1500):
     """Build dataset for ASAPPP prompts 1-2"""
     print("Loading ASAPPP prompts 1-2 from HuggingFace...")
 
-    # Load dataset and split into train and test
     dataset = load_dataset("llm-aes/asappp-1-2-original", split="train")
     dataset_splits = dataset.train_test_split(test_size=0.1, seed=42)
     train_ds = dataset_splits["train"]
     test_ds = dataset_splits["test"]
 
-    # Score range for prompts 1-2 is 2-12 (domain1_score)
     min_score, max_score = 2, 12
-    score_bins = max_score - min_score + 1  # 11 bins
+    score_bins = max_score - min_score + 1
 
     for split_name, dataset in [("train", train_ds), ("test", test_ds)]:
         print(f"Processing {split_name} split...")
@@ -72,70 +78,54 @@ def build_dataset_prompts_1_2(output_dir: str, num_aug: int = 1, max_length: int
         for idx, example in enumerate(tqdm(dataset)):
             essay = example["essay"]
             score = example["domain1_score"]
-            essay_set = example["essay_set"]
 
-            if len(essay) > max_length:
+            if len(essay) > max_char_length:
                 filtered_count += 1
                 continue
 
-            # Normalize score to [0, 1]
             normalized_score = normalize_score(score, min_score, max_score)
 
-            # Apply augmentation (simple: just repeat the example)
             for aug_idx in range(num_aug):
-                # Tokenize essay
-                essay_tokens = tokenize_essay(essay, max_length)
-
-                # Create input: essay tokens
+                essay_tokens = tokenize_essay(essay, MAX_TOKENS)
                 input_seq = essay_tokens
 
-                # Create label: normalized score (as single value, repeated for sequence)
-                # We'll use the last token position for the prediction
-                label_seq = np.full(max_length, IGNORE_LABEL_ID, dtype=np.int32)
-                # Put score at the last position (discretized into bins)
+                label_seq = np.full(MAX_TOKENS, IGNORE_LABEL_ID, dtype=np.int32)
                 score_bin = int(normalized_score * (score_bins - 1))
                 label_seq[-1] = score_bin
 
                 inputs_list.append(input_seq)
                 labels_list.append(label_seq)
-                puzzle_identifiers.append(kept_essay_idx)  # Group by kept essay index
+                puzzle_identifiers.append(kept_essay_idx)
 
                 current_example_idx += 1
                 puzzle_indices.append(current_example_idx)
 
-            # Each essay is its own group
             group_indices.append(kept_essay_idx + 1)
             kept_essay_idx += 1
 
-        print(f"Filtered out {filtered_count} essays longer than {max_length} characters.")
+        print(f"Filtered out {filtered_count} essays longer than {max_char_length} characters.")
 
-        # Convert to numpy arrays
         inputs = np.array(inputs_list, dtype=np.int32)
         labels = np.array(labels_list, dtype=np.int32)
         puzzle_identifiers = np.array(puzzle_identifiers, dtype=np.int32)
         puzzle_indices = np.array(puzzle_indices, dtype=np.int32)
         group_indices = np.array(group_indices, dtype=np.int32)
 
-        # Create output directory
         split_dir = os.path.join(output_dir, split_name)
         os.makedirs(split_dir, exist_ok=True)
 
-        # Save arrays
         np.save(os.path.join(split_dir, f"all__inputs.npy"), inputs)
         np.save(os.path.join(split_dir, f"all__labels.npy"), labels)
-        np.save(
-            os.path.join(split_dir, f"all__puzzle_identifiers.npy"), puzzle_identifiers
-        )
+        np.save(os.path.join(split_dir, f"all__puzzle_identifiers.npy"), puzzle_identifiers)
         np.save(os.path.join(split_dir, f"all__puzzle_indices.npy"), puzzle_indices)
         np.save(os.path.join(split_dir, f"all__group_indices.npy"), group_indices)
 
-        # Create metadata
         metadata = {
             "pad_id": PAD_ID,
             "ignore_label_id": IGNORE_LABEL_ID,
             "blank_identifier_id": BLANK_IDENTIFIER_ID,
-            "vocab_size": CHAR_VOCAB_SIZE,
-            "seq_len": max_length,
+            "vocab_size": VOCAB_SIZE,
+            "seq_len": MAX_TOKENS,
             "num_puzzle_identifiers": len(np.unique(puzzle_identifiers)),
             "total_groups": len(group_indices) - 1,
             "mean_puzzle_examples": num_aug,
@@ -153,19 +143,17 @@ def build_dataset_prompts_1_2(output_dir: str, num_aug: int = 1, max_length: int
         print(f"Saved {split_name} split: {len(inputs)} examples")
 
 
-def build_dataset_prompts_3_6(output_dir: str, num_aug: int = 1, max_length: int = 1500):
+def build_dataset_prompts_3_6(output_dir: str, num_aug: int = 1, max_char_length: int = 1500):
     """Build dataset for ASAPPP prompts 3-6"""
     print("Loading ASAPPP prompts 3-6 from HuggingFace...")
 
-    # Load dataset and split into train and test
     dataset = load_dataset("llm-aes/asappp-3-6-original", split="train")
     dataset_splits = dataset.train_test_split(test_size=0.1, seed=42)
     train_ds = dataset_splits["train"]
     test_ds = dataset_splits["test"]
 
-    # Score range for prompts 3-6 is 0-4 (domain1_score)
     min_score, max_score = 0, 4
-    score_bins = max_score - min_score + 1  # 5 bins
+    score_bins = max_score - min_score + 1
 
     for split_name, dataset in [("train", train_ds), ("test", test_ds)]:
         print(f"Processing {split_name} split...")
@@ -183,25 +171,18 @@ def build_dataset_prompts_3_6(output_dir: str, num_aug: int = 1, max_length: int
         for idx, example in enumerate(tqdm(dataset)):
             essay = example["essay"]
             score = example["domain1_score"]
-            essay_set = example["essay_set"]
 
-            if len(essay) > max_length:
+            if len(essay) > max_char_length:
                 filtered_count += 1
                 continue
 
-            # Normalize score to [0, 1]
             normalized_score = normalize_score(score, min_score, max_score)
 
-            # Apply augmentation
             for aug_idx in range(num_aug):
-                # Tokenize essay
-                essay_tokens = tokenize_essay(essay, max_length)
-
-                # Create input: essay tokens
+                essay_tokens = tokenize_essay(essay, MAX_TOKENS)
                 input_seq = essay_tokens
 
-                # Create label: normalized score
-                label_seq = np.full(max_length, IGNORE_LABEL_ID, dtype=np.int32)
+                label_seq = np.full(MAX_TOKENS, IGNORE_LABEL_ID, dtype=np.int32)
                 score_bin = int(normalized_score * (score_bins - 1))
                 label_seq[-1] = score_bin
 
@@ -215,35 +196,29 @@ def build_dataset_prompts_3_6(output_dir: str, num_aug: int = 1, max_length: int
             group_indices.append(kept_essay_idx + 1)
             kept_essay_idx += 1
 
-        print(f"Filtered out {filtered_count} essays longer than {max_length} characters.")
+        print(f"Filtered out {filtered_count} essays longer than {max_char_length} characters.")
 
-        # Convert to numpy arrays
         inputs = np.array(inputs_list, dtype=np.int32)
         labels = np.array(labels_list, dtype=np.int32)
         puzzle_identifiers = np.array(puzzle_identifiers, dtype=np.int32)
         puzzle_indices = np.array(puzzle_indices, dtype=np.int32)
         group_indices = np.array(group_indices, dtype=np.int32)
 
-        # Create output directory
         split_dir = os.path.join(output_dir, split_name)
         os.makedirs(split_dir, exist_ok=True)
 
-        # Save arrays
         np.save(os.path.join(split_dir, f"all__inputs.npy"), inputs)
         np.save(os.path.join(split_dir, f"all__labels.npy"), labels)
-        np.save(
-            os.path.join(split_dir, f"all__puzzle_identifiers.npy"), puzzle_identifiers
-        )
+        np.save(os.path.join(split_dir, f"all__puzzle_identifiers.npy"), puzzle_identifiers)
         np.save(os.path.join(split_dir, f"all__puzzle_indices.npy"), puzzle_indices)
         np.save(os.path.join(split_dir, f"all__group_indices.npy"), group_indices)
 
-        # Create metadata
         metadata = {
             "pad_id": PAD_ID,
             "ignore_label_id": IGNORE_LABEL_ID,
             "blank_identifier_id": BLANK_IDENTIFIER_ID,
-            "vocab_size": CHAR_VOCAB_SIZE,
-            "seq_len": max_length,
+            "vocab_size": VOCAB_SIZE,
+            "seq_len": MAX_TOKENS,
             "num_puzzle_identifiers": len(np.unique(puzzle_identifiers)),
             "total_groups": len(group_indices) - 1,
             "mean_puzzle_examples": num_aug,
@@ -261,19 +236,17 @@ def build_dataset_prompts_3_6(output_dir: str, num_aug: int = 1, max_length: int
         print(f"Saved {split_name} split: {len(inputs)} examples")
 
 
-def build_dataset_prompt_7(output_dir: str, num_aug: int = 1, max_length: int = 1500):
+def build_dataset_prompt_7(output_dir: str, num_aug: int = 1, max_char_length: int = 1500):
     """Build dataset for ASAPPP prompt 7"""
     print("Loading ASAPPP prompt 7 from HuggingFace...")
 
-    # Load dataset and split into train and test
     dataset = load_dataset("llm-aes/asap-7-original", split="train")
     dataset_splits = dataset.train_test_split(test_size=0.1, seed=42)
     train_ds = dataset_splits["train"]
     test_ds = dataset_splits["test"]
 
-    # Score range for prompt 7 is 2-24 (domain1_score)
     min_score, max_score = 2, 24
-    score_bins = max_score - min_score + 1  # 23 bins
+    score_bins = max_score - min_score + 1
 
     for split_name, dataset in [("train", train_ds), ("test", test_ds)]:
         print(f"Processing {split_name} split...")
@@ -292,23 +265,17 @@ def build_dataset_prompt_7(output_dir: str, num_aug: int = 1, max_length: int = 
             essay = example["essay"]
             score = example["domain1_score"]
 
-            if len(essay) > max_length:
+            if len(essay) > max_char_length:
                 filtered_count += 1
                 continue
 
-            # Normalize score to [0, 1]
             normalized_score = normalize_score(score, min_score, max_score)
 
-            # Apply augmentation
             for aug_idx in range(num_aug):
-                # Tokenize essay
-                essay_tokens = tokenize_essay(essay, max_length)
-
-                # Create input: essay tokens
+                essay_tokens = tokenize_essay(essay, MAX_TOKENS)
                 input_seq = essay_tokens
 
-                # Create label: normalized score
-                label_seq = np.full(max_length, IGNORE_LABEL_ID, dtype=np.int32)
+                label_seq = np.full(MAX_TOKENS, IGNORE_LABEL_ID, dtype=np.int32)
                 score_bin = int(normalized_score * (score_bins - 1))
                 label_seq[-1] = score_bin
 
@@ -322,35 +289,29 @@ def build_dataset_prompt_7(output_dir: str, num_aug: int = 1, max_length: int = 
             group_indices.append(kept_essay_idx + 1)
             kept_essay_idx += 1
 
-        print(f"Filtered out {filtered_count} essays longer than {max_length} characters.")
+        print(f"Filtered out {filtered_count} essays longer than {max_char_length} characters.")
 
-        # Convert to numpy arrays
         inputs = np.array(inputs_list, dtype=np.int32)
         labels = np.array(labels_list, dtype=np.int32)
         puzzle_identifiers = np.array(puzzle_identifiers, dtype=np.int32)
         puzzle_indices = np.array(puzzle_indices, dtype=np.int32)
         group_indices = np.array(group_indices, dtype=np.int32)
 
-        # Create output directory
         split_dir = os.path.join(output_dir, split_name)
         os.makedirs(split_dir, exist_ok=True)
 
-        # Save arrays
         np.save(os.path.join(split_dir, f"all__inputs.npy"), inputs)
         np.save(os.path.join(split_dir, f"all__labels.npy"), labels)
-        np.save(
-            os.path.join(split_dir, f"all__puzzle_identifiers.npy"), puzzle_identifiers
-        )
+        np.save(os.path.join(split_dir, f"all__puzzle_identifiers.npy"), puzzle_identifiers)
         np.save(os.path.join(split_dir, f"all__puzzle_indices.npy"), puzzle_indices)
         np.save(os.path.join(split_dir, f"all__group_indices.npy"), group_indices)
 
-        # Create metadata
         metadata = {
             "pad_id": PAD_ID,
             "ignore_label_id": IGNORE_LABEL_ID,
             "blank_identifier_id": BLANK_IDENTIFIER_ID,
-            "vocab_size": CHAR_VOCAB_SIZE,
-            "seq_len": max_length,
+            "vocab_size": VOCAB_SIZE,
+            "seq_len": MAX_TOKENS,
             "num_puzzle_identifiers": len(np.unique(puzzle_identifiers)),
             "total_groups": len(group_indices) - 1,
             "mean_puzzle_examples": num_aug,
@@ -390,7 +351,7 @@ def main():
         help="Number of augmentations per essay (default: 1)",
     )
     parser.add_argument(
-        "--max-length",
+        "--max-char-length",
         type=int,
         default=1500,
         help="Maximum character length for essays. Longer essays will be filtered out.",
@@ -401,13 +362,13 @@ def main():
     os.makedirs(args.output_dir, exist_ok=True)
 
     if args.prompt_set == "1-2" or args.prompt_set == "all":
-        build_dataset_prompts_1_2(args.output_dir + "_prompts_1-2", args.num_aug, args.max_length)
+        build_dataset_prompts_1_2(args.output_dir + "_prompts_1-2", args.num_aug, args.max_char_length)
 
     if args.prompt_set == "3-6" or args.prompt_set == "all":
-        build_dataset_prompts_3_6(args.output_dir + "_prompts_3-6", args.num_aug, args.max_length)
+        build_dataset_prompts_3_6(args.output_dir + "_prompts_3-6", args.num_aug, args.max_char_length)
 
     if args.prompt_set == "7" or args.prompt_set == "all":
-        build_dataset_prompt_7(args.output_dir + "_prompts_7", args.num_aug, args.max_length)
+        build_dataset_prompt_7(args.output_dir + "_prompts_7", args.num_aug, args.max_char_length)
 
     print("Dataset building complete!")
 
