@@ -99,7 +99,7 @@ def evaluate_model(
                     break
 
             predictions = preds["prediction"].squeeze()
-            labels = batch["labels"].squeeze()[:, -1]
+            labels = batch["labels"].squeeze()[:, 0]
 
             all_preds.append(predictions.cpu().numpy())
             all_labels.append(labels.cpu().numpy())

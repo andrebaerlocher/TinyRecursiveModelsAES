@@ -77,9 +77,9 @@ def build_dataset_prompts_1_2(output_dir: str, num_aug: int = 1, max_char_length
                 input_tokens = tokenize_input(prompt, essay, MAX_TOKENS)
                 input_seq = input_tokens
 
-                # For regression, save the actual score as a float
+                # For regression, save the actual score at the first position
                 label_seq = np.full(MAX_TOKENS, float(IGNORE_LABEL_ID), dtype=np.float32)
-                label_seq[-1] = float(score)
+                label_seq[0] = float(score)
 
                 inputs_list.append(input_seq)
                 labels_list.append(label_seq)
@@ -94,7 +94,7 @@ def build_dataset_prompts_1_2(output_dir: str, num_aug: int = 1, max_char_length
         print(f"Filtered out {filtered_count} essays longer than {max_char_length} characters.")
 
         inputs = np.array(inputs_list, dtype=np.int32)
-        labels = np.array(labels_list, dtype=np.float32) # Save labels as float32
+        labels = np.array(labels_list, dtype=np.float32)
         puzzle_identifiers = np.array(puzzle_identifiers, dtype=np.int32)
         puzzle_indices = np.array(puzzle_indices, dtype=np.int32)
         group_indices = np.array(group_indices, dtype=np.int32)
@@ -129,7 +129,6 @@ def build_dataset_prompts_1_2(output_dir: str, num_aug: int = 1, max_char_length
             json.dump(metadata, f, indent=2)
 
         print(f"Saved {split_name} split: {len(inputs)} examples")
-
 
 def build_dataset_prompts_3_6(output_dir: str, num_aug: int = 1, max_char_length: int = 1500):
     """Build dataset for ASAPPP prompts 3-6"""
@@ -170,7 +169,7 @@ def build_dataset_prompts_3_6(output_dir: str, num_aug: int = 1, max_char_length
                 input_seq = input_tokens
 
                 label_seq = np.full(MAX_TOKENS, float(IGNORE_LABEL_ID), dtype=np.float32)
-                label_seq[-1] = float(score)
+                label_seq[0] = float(score)
 
                 inputs_list.append(input_seq)
                 labels_list.append(label_seq)
@@ -221,7 +220,6 @@ def build_dataset_prompts_3_6(output_dir: str, num_aug: int = 1, max_char_length
 
         print(f"Saved {split_name} split: {len(inputs)} examples")
 
-
 def build_dataset_prompt_7(output_dir: str, num_aug: int = 1, max_char_length: int = 1500):
     """Build dataset for ASAPPP prompt 7"""
     print("Loading ASAPPP prompt 7 from HuggingFace...")
@@ -261,7 +259,7 @@ def build_dataset_prompt_7(output_dir: str, num_aug: int = 1, max_char_length: i
                 input_seq = input_tokens
 
                 label_seq = np.full(MAX_TOKENS, float(IGNORE_LABEL_ID), dtype=np.float32)
-                label_seq[-1] = float(score)
+                label_seq[0] = float(score)
 
                 inputs_list.append(input_seq)
                 labels_list.append(label_seq)
@@ -311,7 +309,6 @@ def build_dataset_prompt_7(output_dir: str, num_aug: int = 1, max_char_length: i
             json.dump(metadata, f, indent=2)
 
         print(f"Saved {split_name} split: {len(inputs)} examples")
-
 
 def main():
     parser = argparse.ArgumentParser(description="Build ASAPPP dataset for TRM")
