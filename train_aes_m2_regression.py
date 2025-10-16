@@ -359,7 +359,7 @@ def main():
     parser.add_argument(
         "--epochs", type=int, default=100, help="Number of epochs (default: 100)"
     )
-    parser.add_argument("--lr", type=float, default=3e-5, help="Learning rate")
+    parser.add_argument("--lr", type=float, default=1e-5, help="Learning rate")
     parser.add_argument(
         "--hidden_size", type=int, default=512, help="Model embedding dimension"
     )
@@ -402,6 +402,9 @@ def main():
         type=float,
         default=0.5,
         help="ACT halt threshold for regression",
+    )
+    parser.add_argument(
+        "--dropout", type=float, default=0.1, help="Dropout rate"
     )
 
     args = parser.parse_args()
@@ -485,6 +488,7 @@ def main():
         "expansion": args.expansion,
         "num_heads": args.num_heads,
         "pos_encodings": "rope",
+        "dropout": args.dropout,
         "halt_max_steps": 10,
         "halt_exploration_prob": 0.1,
         "halt_threshold": args.halt_threshold,

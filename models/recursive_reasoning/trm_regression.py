@@ -7,6 +7,8 @@ import torch.nn.functional as F
 from torch import nn
 from pydantic import BaseModel
 import random
+from transformers import AutoModel
+
 from models.common import trunc_normal_init_
 from models.layers import rms_norm, LinearSwish, SwiGLU, Attention, RotaryEmbedding, CosSin, CastedEmbedding, CastedLinear
 from models.sparse_embedding import CastedSparseEmbedding
@@ -47,6 +49,7 @@ class TinyRecursiveReasoningModel_ACTV1Config(BaseModel):
     expansion: float
     num_heads: int
     pos_encodings: str
+    dropout: float = 0.1
 
     rms_norm_eps: float = 1e-5
     rope_theta: float = 10000.0
@@ -62,6 +65,10 @@ class TinyRecursiveReasoningModel_ACTV1Config(BaseModel):
     mlp_t: bool = False # use mlp on L instead of transformer
     puzzle_emb_len: int = 16 # if non-zero, its specified to this value
     no_ACT_continue: bool =  True # No continue ACT loss, only use the sigmoid of the halt which makes much more sense
+
+    # New options for pre-trained embeddings
+    use_pretrained_embeddings: bool = True
+    tokenizer_name: str = "bert-base-uncased"
 
 class TinyRecursiveReasoningModel_ACTV1Block(nn.Module):
     def __init__(self, config: TinyRecursiveReasoningModel_ACTV1Config) -> None:
@@ -87,6 +94,7 @@ class TinyRecursiveReasoningModel_ACTV1Block(nn.Module):
             expansion=config.expansion,
         )
         self.norm_eps = config.rms_norm_eps
+        self.dropout = nn.Dropout(config.dropout)
 
     def forward(self, cos_sin: CosSin, hidden_states: torch.Tensor) -> torch.Tensor:
         # B, L, D = hidden_states.shape
@@ -94,14 +102,15 @@ class TinyRecursiveReasoningModel_ACTV1Block(nn.Module):
         if self.config.mlp_t:
             hidden_states = hidden_states.transpose(1,2)
             out = self.mlp_t(hidden_states)
-            hidden_states = rms_norm(hidden_states + out, variance_epsilon=self.norm_eps)
+            hidden_states = rms_norm(hidden_states + self.dropout(out), variance_epsilon=self.norm_eps)
             hidden_states = hidden_states.transpose(1,2)
         else:
             # Self Attention
-            hidden_states = rms_norm(hidden_states + self.self_attn(cos_sin=cos_sin, hidden_states=hidden_states), variance_epsilon=self.norm_eps)
+            attn_output = self.self_attn(cos_sin=cos_sin, hidden_states=hidden_states)
+            hidden_states = rms_norm(hidden_states + self.dropout(attn_output), variance_epsilon=self.norm_eps)
         # Fully Connected
         out = self.mlp(hidden_states)
-        hidden_states = rms_norm(hidden_states + out, variance_epsilon=self.norm_eps)
+        hidden_states = rms_norm(hidden_states + self.dropout(out), variance_epsilon=self.norm_eps)
         return hidden_states
 
 class TinyRecursiveReasoningModel_ACTV1ReasoningModule(nn.Module):
@@ -128,6 +137,24 @@ class TinyRecursiveReasoningModel_ACTV1_Inner(nn.Module):
         embed_init_std = 1.0 / self.embed_scale
 
         self.embed_tokens = CastedEmbedding(self.config.vocab_size, self.config.hidden_size, init_std=embed_init_std, cast_to=self.forward_dtype)
+        
+        # --- Load Pre-trained Embeddings ---
+        if self.config.use_pretrained_embeddings:
+            print(f"Attempting to load pre-trained embeddings from {self.config.tokenizer_name}...")
+            try:
+                pretrained_model = AutoModel.from_pretrained(self.config.tokenizer_name)
+                pretrained_embeddings = pretrained_model.embeddings.word_embeddings.weight
+                
+                if pretrained_embeddings.shape[0] != self.config.vocab_size or \
+                   pretrained_embeddings.shape[1] != self.config.hidden_size:
+                    print(f"WARNING: Size mismatch for embeddings. Pre-trained: {pretrained_embeddings.shape}, Model: ({self.config.vocab_size}, {self.config.hidden_size}). Not loading weights.")
+                else:
+                    self.embed_tokens.embedding.weight.data.copy_(pretrained_embeddings)
+                    print("Successfully loaded pre-trained embeddings.")
+            except Exception as e:
+                print(f"WARNING: Could not load pre-trained embeddings: {e}")
+        # -------------------------------------
+
         self.regression_head = CastedLinear(self.config.hidden_size, 1, bias=False)
         self.q_head       = CastedLinear(self.config.hidden_size, 2, bias=True)
 
