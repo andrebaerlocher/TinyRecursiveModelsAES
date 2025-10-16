@@ -251,35 +251,22 @@ class TinyRecursiveReasoningModel_ACTV1_Inner(nn.Module):
 
     def _input_embeddings(self, input: torch.Tensor, puzzle_identifiers: torch.Tensor):
         # Token embedding
-        embedding = self.embed_tokens(input.to(torch.int32))
+        token_embeddings = self.embed_tokens(input.to(torch.int32))
 
-        # Puzzle embeddings
+        # Prepend puzzle/essay embedding
         if self.config.puzzle_emb_ndim > 0:
+            # Get the embedding for each essay ID in the batch
             puzzle_embedding = self.puzzle_emb(puzzle_identifiers)
-
-            pad_count = (
-                self.puzzle_emb_len * self.config.hidden_size
-                - puzzle_embedding.shape[-1]
-            )
-            if pad_count > 0:
-                puzzle_embedding = F.pad(puzzle_embedding, (0, pad_count))
-
-            embedding = torch.cat(
-                (
-                    puzzle_embedding.view(
-                        -1, self.puzzle_emb_len, self.config.hidden_size
-                    ),
-                    embedding,
-                ),
-                dim=-2,
-            )
+            # Add a sequence dimension (S=1) to allow concatenation
+            puzzle_embedding = puzzle_embedding.unsqueeze(1)
+            # Concatenate along the sequence dimension
+            embedding = torch.cat((puzzle_embedding, token_embeddings), dim=1)
+        else:
+            embedding = token_embeddings
 
         # Position embeddings
         if self.config.pos_encodings == "learned":
-            # scale by 1/sqrt(2) to maintain forward variance
-            embedding = 0.707106781 * (
-                embedding + self.embed_pos.embedding_weight.to(self.forward_dtype)
-            )
+            embedding = 0.707106781 * (embedding + self.embed_pos.embedding_weight.to(self.forward_dtype))
 
         # Scale
         return self.embed_scale * embedding
