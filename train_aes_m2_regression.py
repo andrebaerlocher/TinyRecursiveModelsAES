@@ -361,7 +361,7 @@ def main():
     )
     parser.add_argument("--lr", type=float, default=1e-5, help="Learning rate")
     parser.add_argument(
-        "--hidden_size", type=int, default=512, help="Model embedding dimension"
+        "--hidden_size", type=int, default=768, help="Model embedding dimension"
     )
     parser.add_argument(
         "--expansion", type=float, default=4, help="Hidden layer expansion"
