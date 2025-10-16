@@ -149,8 +149,7 @@ class TinyRecursiveReasoningModel_ACTV1_Inner(nn.Module):
                    pretrained_embeddings.shape[1] != self.config.hidden_size:
                     print(f"WARNING: Size mismatch for embeddings. Pre-trained: {pretrained_embeddings.shape}, Model: ({self.config.vocab_size}, {self.config.hidden_size}). Not loading weights.")
                 else:
-                    self.embed_tokens.embedding.weight.data.copy_(pretrained_embeddings)
-                    print("Successfully loaded pre-trained embeddings.")
+                                            self.embed_tokens.embedding_weight.data.copy_(pretrained_embeddings)                    print("Successfully loaded pre-trained embeddings.")
             except Exception as e:
                 print(f"WARNING: Could not load pre-trained embeddings: {e}")
         # -------------------------------------
