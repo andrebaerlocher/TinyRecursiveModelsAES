@@ -166,7 +166,9 @@ class PuzzleDataset(IterableDataset):
 
     def _collate_batch(self, batch):
         # Convert dtype
-        batch = {k: v.astype(np.int32) for k, v in batch.items()}
+        for k, v in batch.items():
+            if k != 'labels':
+                batch[k] = v.astype(np.int32)
 
         # Convert ignore label IDs
         if self.metadata.ignore_label_id is not None:
@@ -300,13 +302,6 @@ class PuzzleDataset(IterableDataset):
                 )
 
                 yield set_name, batch, global_effective_batch_size
-
-                # --- BATCH DEBUG --- 
-                print("\n--- NEW BATCH DEBUG ---")
-                print(f"Labels shape: {batch['labels'].shape}")
-                print(f"Last 5 values of first label sequence: {batch['labels'][0, -5:]}")
-                print("---------------------\n")
-                # --- END BATCH DEBUG ---
 
     def __iter__(self):
         worker_info = get_worker_info()

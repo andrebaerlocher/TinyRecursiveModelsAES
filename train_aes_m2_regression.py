@@ -318,7 +318,7 @@ class AESTrainer:
                 self.save_checkpoint(f"checkpoint_epoch_{epoch+1}_m2_regression.pt")
 
     def save_checkpoint(self, filename: str):
-        """Save model checkpoint and trigger evaluation"""
+        """Save model checkpoint"""
         checkpoint_dir = self.config.get(
             "checkpoint_path", "checkpoints/aes_m2_regression"
         )
@@ -340,44 +340,6 @@ class AESTrainer:
 
         torch.save(checkpoint, checkpoint_path)
         print(f"Saved checkpoint to {checkpoint_path}")
-
-        # --- Automatically run evaluation on the new checkpoint ---
-        print(f"--- Running evaluation for checkpoint: {filename} ---")
-        command = [
-            sys.executable,
-            "evaluate_aes.py",
-            "--checkpoint",
-            checkpoint_path,
-            "--batch-size",
-            str(self.config.get("batch_size", 16)),
-        ]
-        
-        data_paths = self.config.get("data_path", [])
-        if isinstance(data_paths, list):
-            for path in data_paths:
-                command.extend(["--data-path", path])
-        else:
-            command.extend(["--data-path", data_paths])
-
-        try:
-            result = subprocess.run(
-                command,
-                check=True,
-                capture_output=True,
-                text=True,
-                encoding='utf-8'
-            )
-            print(result.stdout)
-            if result.stderr:
-                print("--- Evaluation Errors ---")
-                print(result.stderr)
-        except subprocess.CalledProcessError as e:
-            print(f"--- Evaluation for {filename} failed! ---")
-            print("--- STDOUT ---")
-            print(e.stdout)
-            print("--- STDERR ---")
-            print(e.stderr)
-        print(f"--- End of evaluation for checkpoint: {filename} ---")
 
 
 def main():
