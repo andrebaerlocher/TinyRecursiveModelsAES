@@ -478,7 +478,7 @@ def main():
     model_config = {
         "batch_size": args.batch_size,
         "seq_len": metadata.seq_len,
-        "puzzle_emb_ndim": 128,
+        "puzzle_emb_ndim": args.hidden_size,
         "num_puzzle_identifiers": metadata.num_puzzle_identifiers,
         "vocab_size": metadata.vocab_size,
         "H_cycles": args.H_cycles,

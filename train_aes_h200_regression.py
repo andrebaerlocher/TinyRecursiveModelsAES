@@ -299,7 +299,7 @@ def main():
 
     if is_main_process(): print("Creating model...")
     model_config = {
-        "batch_size": args.batch_size, "seq_len": args.seq_len, "puzzle_emb_ndim": 128,
+        "batch_size": args.batch_size, "seq_len": args.seq_len, "puzzle_emb_ndim": args.hidden_size,
         "num_puzzle_identifiers": metadata.num_puzzle_identifiers, "vocab_size": metadata.vocab_size,
         "H_cycles": args.H_cycles, "L_cycles": args.L_cycles, "H_layers": 1, "L_layers": args.L_layers,
         "hidden_size": args.hidden_size, "expansion": args.expansion, "num_heads": args.num_heads,
