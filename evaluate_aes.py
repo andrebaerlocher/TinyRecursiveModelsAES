@@ -17,8 +17,11 @@ from tqdm import tqdm
 from puzzle_dataset import PuzzleDataset, PuzzleDatasetConfig
 from torch.utils.data import DataLoader
 from evaluators.aes_evaluator import AESEvaluator, AESEvaluatorConfig
-from models.recursive_reasoning.trm_regression import TinyRecursiveReasoningModel_ACTV1_Regression
+from models.recursive_reasoning.trm_regression import (
+    TinyRecursiveReasoningModel_ACTV1_Regression,
+)
 from train_aes_m2_regression import MSELossWrapper, get_device, set_seed
+
 
 def load_model(checkpoint_path: str, device: torch.device) -> tuple:
     """Load model from checkpoint"""
@@ -26,12 +29,12 @@ def load_model(checkpoint_path: str, device: torch.device) -> tuple:
 
     checkpoint = torch.load(checkpoint_path, map_location=device)
     config = checkpoint["config"]
-    model_config = config['model_config']
+    model_config = config["model_config"]
 
     # Create model
     model = TinyRecursiveReasoningModel_ACTV1_Regression(model_config)
     model = MSELossWrapper(model)
-    model.load_state_dict(checkpoint['model_state_dict'])
+    model.load_state_dict(checkpoint["model_state_dict"])
     model = model.to(device)
     model.eval()
 
@@ -42,20 +45,23 @@ def load_model(checkpoint_path: str, device: torch.device) -> tuple:
 
     # Get dataset info from config
     first_data_path = (
-        config['data_path'][0] if isinstance(config['data_path'], list) else config['data_path']
+        config["data_path"][0]
+        if isinstance(config["data_path"], list)
+        else config["data_path"]
     )
     # Correct the path to dataset.json
     if not os.path.exists(os.path.join(first_data_path, "train", "dataset.json")):
         # If not in train, check root of data_path
-        if os.path.exists(os.path.join(first_data_path, "dataset.json')):
-             with open(os.path.join(first_data_path, "dataset.json"), "r") as f:
+        if os.path.exists(os.path.join(first_data_path, "dataset.json")):
+            with open(os.path.join(first_data_path, "dataset.json"), "r") as f:
                 dataset_info = json.load(f)
         else:
-            raise FileNotFoundError("dataset.json not found in train directory or data_path root.")
+            raise FileNotFoundError(
+                "dataset.json not found in train directory or data_path root."
+            )
     else:
         with open(os.path.join(first_data_path, "train", "dataset.json"), "r") as f:
             dataset_info = json.load(f)
-
 
     return model, config, dataset_info
 
@@ -70,7 +76,7 @@ def evaluate_model(
 ) -> Dict[str, Any]:
     """Evaluate model on dataset"""
     model.eval()
-    
+
     all_preds = []
     all_labels = []
     all_essay_ids = []
@@ -82,7 +88,8 @@ def evaluate_model(
             batch = {k: v.to(device) for k, v in batch.items()}
 
             if eval_carry is None:
-                eval_carry = model.initial_carry(batch)
+                with torch.device(device):
+                    eval_carry = model.initial_carry(batch)
 
             while True:
                 eval_carry, _, _, preds, all_finish = model(
@@ -90,7 +97,7 @@ def evaluate_model(
                 )
                 if all_finish:
                     break
-            
+
             predictions = preds["prediction"].squeeze()
             labels = batch["labels"].squeeze()[:, 0]
 
@@ -116,7 +123,9 @@ def evaluate_model(
         "mse": evaluator.compute_mse(all_preds, all_labels),
         "rmse": evaluator.compute_rmse(all_preds, all_labels),
         "accuracy": evaluator.compute_accuracy(pred_scores, label_scores),
-        "adjacent_accuracy": evaluator.compute_adjacent_accuracy(pred_scores, label_scores),
+        "adjacent_accuracy": evaluator.compute_adjacent_accuracy(
+            pred_scores, label_scores
+        ),
         "num_samples": num_samples,
         "total_inference_time": duration,
         "time_per_sample": duration / num_samples if num_samples > 0 else 0,
@@ -143,7 +152,9 @@ def evaluate_model(
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Evaluate trained AES model (Regression)")
+    parser = argparse.ArgumentParser(
+        description="Evaluate trained AES model (Regression)"
+    )
     parser.add_argument(
         "--checkpoint",
         type=str,
@@ -154,7 +165,7 @@ def main():
         "--data-path",
         type=str,
         required=True,
-        nargs='+',
+        nargs="+",
         help="Path to dataset directory",
     )
     parser.add_argument(
@@ -182,7 +193,6 @@ def main():
         help="Output file for predictions",
     )
     parser.add_argument("--seed", type=int, default=42, help="Random seed.")
-
 
     args = parser.parse_args()
 
