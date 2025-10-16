@@ -228,6 +228,15 @@ class AESTrainer:
         pred_scores = np.clip(pred_scores, self.evaluator.config.min_score, self.evaluator.config.max_score)
         label_scores = all_labels.astype(int)
 
+        # --- DEBUGGING --- 
+        print("\n--- Evaluation Debug Info ---")
+        print(f"Unique Predicted Scores: {np.unique(pred_scores)}")
+        print(f"Min/Max Predicted: {pred_scores.min()}, {pred_scores.max()}")
+        print(f"Unique Label Scores: {np.unique(label_scores)}")
+        print(f"Min/Max Label: {label_scores.min()}, {label_scores.max()}")
+        print("---------------------------\n")
+        # --- END DEBUGGING ---
+
         # Use the evaluator's compute methods directly
         metrics = {
             "qwk": self.evaluator.compute_qwk(pred_scores, label_scores),
