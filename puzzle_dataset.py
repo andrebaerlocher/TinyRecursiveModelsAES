@@ -234,7 +234,7 @@ class PuzzleDataset(IterableDataset):
                 batch = self._collate_batch(
                     {
                         "inputs": dataset["inputs"][local_start:local_end],
-                        "labels": dataset["labels"][local_start:local_end],
+                        "labels": dataset["labels"][local_start:local_end].copy(),
                         "puzzle_identifiers": dataset["puzzle_identifiers"][
                             puzzle_indices
                         ],
