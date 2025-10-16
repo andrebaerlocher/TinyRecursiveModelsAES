@@ -6,6 +6,7 @@ import os
 import sys
 import json
 import argparse
+import time
 from typing import Dict, Any
 
 import torch
@@ -75,6 +76,7 @@ def evaluate_model(
     all_essay_ids = []
 
     eval_carry = None
+    start_time = time.time()
     with torch.no_grad():
         for set_name, batch, global_batch_size in tqdm(dataloader, desc="Evaluating"):
             batch = {k: v.to(device) for k, v in batch.items()}
@@ -97,6 +99,8 @@ def evaluate_model(
             if "puzzle_identifiers" in batch:
                 all_essay_ids.append(batch["puzzle_identifiers"].cpu().numpy())
 
+    end_time = time.time()
+    duration = end_time - start_time
 
     all_preds = np.concatenate(all_preds)
     all_labels = np.concatenate(all_labels)
@@ -106,13 +110,16 @@ def evaluate_model(
     pred_scores = np.round(all_preds).astype(int)
     label_scores = all_labels.astype(int)
 
+    num_samples = len(pred_scores)
     metrics = {
         "qwk": evaluator.compute_qwk(pred_scores, label_scores),
         "mse": evaluator.compute_mse(all_preds, all_labels),
         "rmse": evaluator.compute_rmse(all_preds, all_labels),
         "accuracy": evaluator.compute_accuracy(pred_scores, label_scores),
         "adjacent_accuracy": evaluator.compute_adjacent_accuracy(pred_scores, label_scores),
-        "num_samples": len(pred_scores),
+        "num_samples": num_samples,
+        "total_inference_time": duration,
+        "time_per_sample": duration / num_samples if num_samples > 0 else 0,
     }
 
     if save_predictions and output_file:
@@ -186,10 +193,12 @@ def main():
     model, config, dataset_info = load_model(args.checkpoint, device)
 
     print(f"\nLoading {args.split} dataset...")
+    # Use data_path from the loaded config to ensure consistency
+    data_path_from_config = config.get("data_path", args.data_path)
     dataset = PuzzleDataset(
         PuzzleDatasetConfig(
             seed=args.seed,
-            dataset_paths=args.data_path,
+            dataset_paths=data_path_from_config,
             global_batch_size=args.batch_size,
             test_set_mode=True,
             epochs_per_iter=1,
@@ -230,7 +239,8 @@ def main():
     print("\n" + "=" * 50)
     print("Evaluation Results")
     print("=" * 50)
-    print(f"Dataset: {', '.join(args.data_path)}")
+    print(f"Checkpoint: {args.checkpoint}")
+    print(f"Dataset: {', '.join(data_path_from_config)}")
     print(f"Split: {args.split}")
     print(f"Score range: {min_score}-{max_score}")
     print(f"\nMetrics:")
@@ -240,6 +250,9 @@ def main():
     print(f"  Accuracy:           {metrics['accuracy']:.4f}")
     print(f"  Adjacent Accuracy:  {metrics['adjacent_accuracy']:.4f}")
     print(f"  Samples:            {metrics['num_samples']}")
+    print(f"\nInference Time:")
+    print(f"  Total time:         {metrics['total_inference_time']:.2f} seconds")
+    print(f"  Time per sample:    {metrics['time_per_sample'] * 1000:.2f} ms")
     print("=" * 50)
 
     print("\nInterpretation:")

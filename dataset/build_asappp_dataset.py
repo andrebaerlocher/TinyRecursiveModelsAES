@@ -38,10 +38,11 @@ def denormalize_score(normalized: float, min_score: int, max_score: int) -> int:
     return int(round(normalized * (max_score - min_score) + min_score))
 
 
-def tokenize_essay(essay: str, max_length: int = MAX_TOKENS) -> np.ndarray:
-    """Convert essay text to token IDs using a transformer tokenizer."""
+def tokenize_input(prompt: str, essay: str, max_length: int = MAX_TOKENS) -> np.ndarray:
+    """Convert prompt and essay text to token IDs using a transformer tokenizer."""
+    combined_text = prompt + " [SEP] " + essay
     output = tokenizer(
-        essay,
+        combined_text,
         truncation=True,
         padding="max_length",
         max_length=max_length,
@@ -76,6 +77,7 @@ def build_dataset_prompts_1_2(output_dir: str, num_aug: int = 1, max_char_length
         filtered_count = 0
 
         for idx, example in enumerate(tqdm(dataset)):
+            prompt = example["prompt"]
             essay = example["essay"]
             score = example["domain1_score"]
 
@@ -86,8 +88,8 @@ def build_dataset_prompts_1_2(output_dir: str, num_aug: int = 1, max_char_length
             normalized_score = normalize_score(score, min_score, max_score)
 
             for aug_idx in range(num_aug):
-                essay_tokens = tokenize_essay(essay, MAX_TOKENS)
-                input_seq = essay_tokens
+                input_tokens = tokenize_input(prompt, essay, MAX_TOKENS)
+                input_seq = input_tokens
 
                 label_seq = np.full(MAX_TOKENS, IGNORE_LABEL_ID, dtype=np.int32)
                 score_bin = int(normalized_score * (score_bins - 1))
@@ -169,6 +171,7 @@ def build_dataset_prompts_3_6(output_dir: str, num_aug: int = 1, max_char_length
         filtered_count = 0
 
         for idx, example in enumerate(tqdm(dataset)):
+            prompt = example["prompt"]
             essay = example["essay"]
             score = example["domain1_score"]
 
@@ -179,8 +182,8 @@ def build_dataset_prompts_3_6(output_dir: str, num_aug: int = 1, max_char_length
             normalized_score = normalize_score(score, min_score, max_score)
 
             for aug_idx in range(num_aug):
-                essay_tokens = tokenize_essay(essay, MAX_TOKENS)
-                input_seq = essay_tokens
+                input_tokens = tokenize_input(prompt, essay, MAX_TOKENS)
+                input_seq = input_tokens
 
                 label_seq = np.full(MAX_TOKENS, IGNORE_LABEL_ID, dtype=np.int32)
                 score_bin = int(normalized_score * (score_bins - 1))
@@ -262,6 +265,7 @@ def build_dataset_prompt_7(output_dir: str, num_aug: int = 1, max_char_length: i
         filtered_count = 0
 
         for idx, example in enumerate(tqdm(dataset)):
+            prompt = example["prompt"]
             essay = example["essay"]
             score = example["domain1_score"]
 
@@ -272,8 +276,8 @@ def build_dataset_prompt_7(output_dir: str, num_aug: int = 1, max_char_length: i
             normalized_score = normalize_score(score, min_score, max_score)
 
             for aug_idx in range(num_aug):
-                essay_tokens = tokenize_essay(essay, MAX_TOKENS)
-                input_seq = essay_tokens
+                input_tokens = tokenize_input(prompt, essay, MAX_TOKENS)
+                input_seq = input_tokens
 
                 label_seq = np.full(MAX_TOKENS, IGNORE_LABEL_ID, dtype=np.int32)
                 score_bin = int(normalized_score * (score_bins - 1))
