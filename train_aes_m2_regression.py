@@ -62,7 +62,7 @@ class MSELossWrapper(nn.Module):
         # Ensure labels are float for MSE loss
         labels = batch["labels"].float()
 
-        loss = self.loss_fn(outputs["prediction"].squeeze(), labels.squeeze()[:, 0])
+        loss = self.loss_fn(outputs["prediction"].squeeze(), labels.squeeze()[:, -1])
 
         # The rest of the returned values are for compatibility with the trainer
         metrics = {}
@@ -215,7 +215,7 @@ class AESTrainer:
                     break
             
             predictions = preds["prediction"].squeeze()
-            labels = batch["labels"].squeeze()[:, 0]
+            labels = batch["labels"].squeeze()[:, -1]
 
             all_preds.append(predictions.cpu().numpy())
             all_labels.append(labels.cpu().numpy())
@@ -227,15 +227,6 @@ class AESTrainer:
         pred_scores = np.round(all_preds).astype(int)
         pred_scores = np.clip(pred_scores, self.evaluator.config.min_score, self.evaluator.config.max_score)
         label_scores = all_labels.astype(int)
-
-        # --- DEBUGGING --- 
-        print("\n--- Evaluation Debug Info ---")
-        print(f"Unique Predicted Scores: {np.unique(pred_scores)}")
-        print(f"Min/Max Predicted: {pred_scores.min()}, {pred_scores.max()}")
-        print(f"Unique Label Scores: {np.unique(label_scores)}")
-        print(f"Min/Max Label: {label_scores.min()}, {label_scores.max()}")
-        print("---------------------------\n")
-        # --- END DEBUGGING ---
 
         # Use the evaluator's compute methods directly
         metrics = {

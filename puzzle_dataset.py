@@ -301,6 +301,13 @@ class PuzzleDataset(IterableDataset):
 
                 yield set_name, batch, global_effective_batch_size
 
+                # --- BATCH DEBUG --- 
+                print("\n--- NEW BATCH DEBUG ---")
+                print(f"Labels shape: {batch['labels'].shape}")
+                print(f"Last 5 values of first label sequence: {batch['labels'][0, -5:]}")
+                print("---------------------\n")
+                # --- END BATCH DEBUG ---
+
     def __iter__(self):
         worker_info = get_worker_info()
         assert (
