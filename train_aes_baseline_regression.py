@@ -256,7 +256,7 @@ def main():
 
     print("Creating model...")
     model_config = {
-        "batch_size": args.batch_size, "seq_len": args.seq_len, "puzzle_emb_ndim": args.hidden_size,
+        "batch_size": args.batch_size, "seq_len": args.seq_len, "puzzle_emb_ndim": 0, # Temporarily disabled for debugging
         "num_puzzle_identifiers": metadata.num_puzzle_identifiers, "vocab_size": metadata.vocab_size,
         "H_cycles": 1, "L_cycles": 1, # Simplified non-recursive baseline
         "H_layers": 1, "L_layers": 2, # L_layers is still used
