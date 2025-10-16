@@ -193,37 +193,47 @@ class AESTrainer:
             self.ema_helper.ema(self.model)
 
         self.model.eval()
-        self.evaluator.reset()
+        
+        all_preds = []
+        all_labels = []
 
         eval_carry = None
-
-        for set_name, batch, global_batch_size in tqdm(
-            self.test_loader, desc="Evaluating"
-        ):
-            # Move to device
+        for set_name, batch, global_batch_size in tqdm(self.test_loader, desc="Evaluating"):
             batch = {k: v.to(self.device) for k, v in batch.items()}
 
             if eval_carry is None:
                 with torch.device(self.device):
                     eval_carry = self.model.initial_carry(batch)
 
-            # Forward pass
             while True:
-                eval_carry, loss, metrics, preds, all_finish = self.model(
+                eval_carry, _, _, preds, all_finish = self.model(
                     carry=eval_carry, batch=batch, return_keys=[]
                 )
                 if all_finish:
                     break
+            
+            predictions = preds["prediction"].squeeze()
+            labels = batch["labels"].squeeze()[:, 0]
 
-            # Add to evaluator
-            self.evaluator.add_batch(
-                preds["prediction"],
-                batch["labels"],
-                batch.get("puzzle_identifiers", None),
-            )
+            all_preds.append(predictions.cpu().numpy())
+            all_labels.append(labels.cpu().numpy())
 
-        # Compute metrics
-        metrics = self.evaluator.compute_metrics()
+        all_preds = np.concatenate(all_preds)
+        all_labels = np.concatenate(all_labels)
+
+        # Round predictions for classification metrics
+        pred_scores = np.round(all_preds).astype(int)
+        label_scores = all_labels.astype(int)
+
+        # Use the evaluator's compute methods directly
+        metrics = {
+            "qwk": self.evaluator.compute_qwk(pred_scores, label_scores),
+            "mse": self.evaluator.compute_mse(all_preds, all_labels),
+            "rmse": self.evaluator.compute_rmse(all_preds, all_labels),
+            "accuracy": self.evaluator.compute_accuracy(pred_scores, label_scores),
+            "adjacent_accuracy": self.evaluator.compute_adjacent_accuracy(pred_scores, label_scores),
+            "num_samples": len(pred_scores),
+        }
 
         # Restore original weights if using EMA
         if use_ema and self.use_ema:
