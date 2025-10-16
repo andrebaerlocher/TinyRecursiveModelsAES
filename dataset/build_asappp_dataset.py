@@ -26,18 +26,6 @@ PAD_ID = tokenizer.pad_token_id
 VOCAB_SIZE = tokenizer.vocab_size
 
 
-def normalize_score(score: int, min_score: int, max_score: int) -> float:
-    """Normalize score to [0, 1] range"""
-    if max_score == min_score:
-        return 0.5
-    return (score - min_score) / (max_score - min_score)
-
-
-def denormalize_score(normalized: float, min_score: int, max_score: int) -> int:
-    """Convert normalized score back to original scale"""
-    return int(round(normalized * (max_score - min_score) + min_score))
-
-
 def tokenize_input(prompt: str, essay: str, max_length: int = MAX_TOKENS) -> np.ndarray:
     """Convert prompt and essay text to token IDs using a transformer tokenizer."""
     combined_text = prompt + " [SEP] " + essay
@@ -85,15 +73,13 @@ def build_dataset_prompts_1_2(output_dir: str, num_aug: int = 1, max_char_length
                 filtered_count += 1
                 continue
 
-            normalized_score = normalize_score(score, min_score, max_score)
-
             for aug_idx in range(num_aug):
                 input_tokens = tokenize_input(prompt, essay, MAX_TOKENS)
                 input_seq = input_tokens
 
-                label_seq = np.full(MAX_TOKENS, IGNORE_LABEL_ID, dtype=np.int32)
-                score_bin = int(normalized_score * (score_bins - 1))
-                label_seq[-1] = score_bin
+                # For regression, save the actual score as a float
+                label_seq = np.full(MAX_TOKENS, float(IGNORE_LABEL_ID), dtype=np.float32)
+                label_seq[-1] = float(score)
 
                 inputs_list.append(input_seq)
                 labels_list.append(label_seq)
@@ -108,7 +94,7 @@ def build_dataset_prompts_1_2(output_dir: str, num_aug: int = 1, max_char_length
         print(f"Filtered out {filtered_count} essays longer than {max_char_length} characters.")
 
         inputs = np.array(inputs_list, dtype=np.int32)
-        labels = np.array(labels_list, dtype=np.int32)
+        labels = np.array(labels_list, dtype=np.float32) # Save labels as float32
         puzzle_identifiers = np.array(puzzle_identifiers, dtype=np.int32)
         puzzle_indices = np.array(puzzle_indices, dtype=np.int32)
         group_indices = np.array(group_indices, dtype=np.int32)
@@ -179,15 +165,12 @@ def build_dataset_prompts_3_6(output_dir: str, num_aug: int = 1, max_char_length
                 filtered_count += 1
                 continue
 
-            normalized_score = normalize_score(score, min_score, max_score)
-
             for aug_idx in range(num_aug):
                 input_tokens = tokenize_input(prompt, essay, MAX_TOKENS)
                 input_seq = input_tokens
 
-                label_seq = np.full(MAX_TOKENS, IGNORE_LABEL_ID, dtype=np.int32)
-                score_bin = int(normalized_score * (score_bins - 1))
-                label_seq[-1] = score_bin
+                label_seq = np.full(MAX_TOKENS, float(IGNORE_LABEL_ID), dtype=np.float32)
+                label_seq[-1] = float(score)
 
                 inputs_list.append(input_seq)
                 labels_list.append(label_seq)
@@ -202,7 +185,7 @@ def build_dataset_prompts_3_6(output_dir: str, num_aug: int = 1, max_char_length
         print(f"Filtered out {filtered_count} essays longer than {max_char_length} characters.")
 
         inputs = np.array(inputs_list, dtype=np.int32)
-        labels = np.array(labels_list, dtype=np.int32)
+        labels = np.array(labels_list, dtype=np.float32)
         puzzle_identifiers = np.array(puzzle_identifiers, dtype=np.int32)
         puzzle_indices = np.array(puzzle_indices, dtype=np.int32)
         group_indices = np.array(group_indices, dtype=np.int32)
@@ -273,15 +256,12 @@ def build_dataset_prompt_7(output_dir: str, num_aug: int = 1, max_char_length: i
                 filtered_count += 1
                 continue
 
-            normalized_score = normalize_score(score, min_score, max_score)
-
             for aug_idx in range(num_aug):
                 input_tokens = tokenize_input(prompt, essay, MAX_TOKENS)
                 input_seq = input_tokens
 
-                label_seq = np.full(MAX_TOKENS, IGNORE_LABEL_ID, dtype=np.int32)
-                score_bin = int(normalized_score * (score_bins - 1))
-                label_seq[-1] = score_bin
+                label_seq = np.full(MAX_TOKENS, float(IGNORE_LABEL_ID), dtype=np.float32)
+                label_seq[-1] = float(score)
 
                 inputs_list.append(input_seq)
                 labels_list.append(label_seq)
@@ -296,7 +276,7 @@ def build_dataset_prompt_7(output_dir: str, num_aug: int = 1, max_char_length: i
         print(f"Filtered out {filtered_count} essays longer than {max_char_length} characters.")
 
         inputs = np.array(inputs_list, dtype=np.int32)
-        labels = np.array(labels_list, dtype=np.int32)
+        labels = np.array(labels_list, dtype=np.float32)
         puzzle_identifiers = np.array(puzzle_identifiers, dtype=np.int32)
         puzzle_indices = np.array(puzzle_indices, dtype=np.int32)
         group_indices = np.array(group_indices, dtype=np.int32)

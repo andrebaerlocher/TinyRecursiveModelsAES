@@ -11,6 +11,7 @@ import argparse
 import time
 import subprocess
 import sys
+import copy
 from datetime import datetime, timedelta
 
 import torch
@@ -188,8 +189,9 @@ class AESTrainer:
     @torch.no_grad()
     def evaluate(self, use_ema: bool = False) -> Dict[str, float]:
         """Evaluate on test set"""
-        # Switch to EMA weights if requested
+        original_state_dict = None
         if use_ema and self.use_ema:
+            original_state_dict = copy.deepcopy(self.model.state_dict())
             self.ema_helper.ema(self.model)
 
         self.model.eval()
@@ -221,8 +223,9 @@ class AESTrainer:
         all_preds = np.concatenate(all_preds)
         all_labels = np.concatenate(all_labels)
 
-        # Round predictions for classification metrics
+        # Round and clip predictions for classification metrics
         pred_scores = np.round(all_preds).astype(int)
+        pred_scores = np.clip(pred_scores, self.evaluator.config.min_score, self.evaluator.config.max_score)
         label_scores = all_labels.astype(int)
 
         # Use the evaluator's compute methods directly
@@ -236,8 +239,8 @@ class AESTrainer:
         }
 
         # Restore original weights if using EMA
-        if use_ema and self.use_ema:
-            self.ema_helper.restore(self.model)
+        if original_state_dict is not None:
+            self.model.load_state_dict(original_state_dict)
 
         self.model.train()
         return metrics
