@@ -1,0 +1,18 @@
+{
+  "pad_id": 0,
+  "ignore_label_id": -100,
+  "blank_identifier_id": 0,
+  "vocab_size": 30522,
+  "seq_len": 512,
+  "num_puzzle_identifiers": 743,
+  "total_groups": 743,
+  "mean_puzzle_examples": 1,
+  "total_puzzles": 743,
+  "sets": [
+    "all"
+  ],
+  "min_score": 2,
+  "max_score": 12,
+  "score_bins": 11,
+  "prompt_set": "1-2"
+}
