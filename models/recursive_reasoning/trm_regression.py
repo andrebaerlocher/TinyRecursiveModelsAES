@@ -20,7 +20,7 @@ from models.layers import (
     CastedEmbedding,
     CastedLinear,
 )
-from models.sparse_embedding import CastedSparseEmbedding
+
 
 IGNORE_LABEL_ID = -100
 
@@ -201,15 +201,8 @@ class TinyRecursiveReasoningModel_ACTV1_Inner(nn.Module):
             if self.config.puzzle_emb_len == 0
             else self.config.puzzle_emb_len
         )  # ceil div
-        if self.config.puzzle_emb_ndim > 0:
-            # Zero init puzzle embeddings
-            self.puzzle_emb = CastedSparseEmbedding(
-                self.config.num_puzzle_identifiers,
-                self.config.puzzle_emb_ndim,
-                batch_size=self.config.batch_size,
-                init_std=0,
-                cast_to=self.forward_dtype,
-            )
+        self.puzzle_emb = nn.Embedding(self.config.num_puzzle_identifiers, self.config.puzzle_emb_ndim)
+        self.puzzle_emb.weight.data.zero_()
 
         # LM Blocks
         if self.config.pos_encodings == "rope":
