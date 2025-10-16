@@ -245,9 +245,9 @@ class AESTrainer:
         self.model.train()
         return metrics
 
-    def train(self, num_epochs: int):
+    def train(self, start_epoch: int, num_epochs: int):
         """Main training loop"""
-        print(f"Starting training for {num_epochs} epochs...")
+        print(f"Starting training from epoch {start_epoch + 1} to {num_epochs}...")
         print(f"Device: {self.device}")
         print(f"Model parameters: {sum(p.numel() for p in self.model.parameters()):,}")
 
@@ -256,7 +256,7 @@ class AESTrainer:
 
         start_time = time.time()
 
-        for epoch in range(num_epochs):
+        for epoch in range(start_epoch, num_epochs):
             print(f"\nEpoch {epoch + 1}/{num_epochs}")
 
             # Train
@@ -406,6 +406,7 @@ def main():
     parser.add_argument(
         "--dropout", type=float, default=0.1, help="Dropout rate"
     )
+    parser.add_argument("--resume-from-checkpoint", type=str, default=None, help="Path to a checkpoint to resume training from.")
 
     args = parser.parse_args()
 
@@ -542,8 +543,29 @@ def main():
         config=config,
     )
 
+    start_epoch = 0
+    if args.resume_from_checkpoint:
+        if not os.path.exists(args.resume_from_checkpoint):
+            print(f"WARNING: Checkpoint file not found, starting from scratch: {args.resume_from_checkpoint}")
+        else:
+            print(f"Resuming training from checkpoint: {args.resume_from_checkpoint}")
+            checkpoint = torch.load(args.resume_from_checkpoint, map_location=device)
+            
+            trainer.model.load_state_dict(checkpoint['model_state_dict'])
+            trainer.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            trainer.scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+            
+            start_epoch = trainer.scheduler.last_epoch
+            trainer.step = checkpoint.get('step', 0)
+            trainer.best_qwk = checkpoint.get('best_qwk', -1.0)
+            
+            if trainer.use_ema and 'ema_state_dict' in checkpoint:
+                trainer.ema_helper.load_state_dict(checkpoint['ema_state_dict'])
+            
+            print(f"Resuming from epoch {start_epoch + 1}")
+
     # Train
-    trainer.train(num_epochs=args.epochs)
+    trainer.train(start_epoch=start_epoch, num_epochs=args.epochs)
 
     print("\nTraining complete!")
     print(f"Best QWK: {trainer.best_qwk:.4f}")

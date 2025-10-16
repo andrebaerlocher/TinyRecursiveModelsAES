@@ -1,352 +1,117 @@
 # Tiny Recursive Models for Automated Essay Scoring (AES)
 
-This is an adaptation of the Tiny Recursive Models (TRM) architecture for Automated Essay Scoring using the ASAPPP dataset. The code has been optimized to run on a MacBook Pro M1 with 16GB RAM.
+This document describes an advanced adaptation of the Tiny Recursive Models (TRM) architecture for Automated Essay Scoring (AES), optimized for both Apple Silicon (M1/M2/M3/M4) and high-performance NVIDIA CUDA systems (H100/H200).
 
 ## Overview
 
-This project adapts the recursive reasoning approach from [Tiny Recursive Models](https://arxiv.org/abs/2510.04871) to the task of automated essay scoring. Instead of solving puzzles, the model learns to score essays through recursive refinement of its predictions.
+This project adapts the recursive reasoning approach from [Tiny Recursive Models](https://arxiv.org/abs/2510.04871) to the task of automated essay scoring. The model has been significantly enhanced from the original character-level adaptation to a modern, tokenizer-based regression model that leverages pre-trained embeddings.
 
-### Key Adaptations
+### Key Features
 
-1. **Dataset**: Uses ASAPPP (Automated Student Assessment Prize Plus Project) dataset from Kaggle
-2. **Task**: Changed from puzzle-solving to essay scoring (regression/classification)
-3. **Platform**: Optimized for Apple M1 Silicon with MPS (Metal Performance Shaders) backend
-4. **Memory**: Reduced model size and batch sizes to work within 16GB RAM constraints
-5. **Evaluation**: Added AES-specific metrics (QWK, MSE, Adjacent Accuracy)
+1.  **Advanced Model**: A regression-based model that predicts a continuous score, not just a classification bin.
+2.  **Tokenizer-based Input**: Uses a `bert-base-uncased` tokenizer to process text as meaningful word/sub-word tokens, allowing the model to understand much more content.
+3.  **Pre-trained Embeddings**: Initializes the model with embeddings from BERT, giving it a massive head-start in understanding language.
+4.  **Multi-Platform Support**: Includes dedicated training scripts for both Apple Silicon (`train_aes_m2_regression.py`) and multi-GPU NVIDIA systems (`train_aes_h200_regression.py`).
+5.  **Configurable Datasets**: The dataset builder script is highly configurable, allowing you to combine prompt sets, limit training examples, and adjust sequence length.
 
 ## Requirements
 
-- macOS with Apple Silicon (M1/M2/M3)
-- Python 3.9 or higher
-- 16GB RAM (minimum)
+- Python 3.9+
+- PyTorch 2.0+
+- For Apple: macOS with Apple Silicon (M1/M2/M3/M4)
+- For NVIDIA: A CUDA-enabled environment and NVIDIA drivers.
+- `pip install -r requirements.txt`
+- `huggingface-cli login`
 
-## Installation
+## 1. Dataset Preparation
+
+The dataset builder script is now highly configurable.
+
+### Analyzing Essay Lengths
+Before building a dataset, you can analyze the token distribution of the official ASAPPP essays to make informed decisions about your sequence length. This command will download the datasets and print a report without saving any files.
 
 ```bash
-# Create virtual environment
-python3 -m venv venv
-source venv/bin/activate
-
-# Upgrade pip
-pip install --upgrade pip wheel setuptools
-
-# Install PyTorch for M1 Mac
-pip install torch torchvision torchaudio
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Login to HuggingFace (required for dataset access)
-huggingface-cli login
+python dataset/build_asappp_dataset.py --prompt-set all --analyze-lengths
 ```
 
-## Dataset Preparation
+### Building a Combined Dataset
+Based on our analysis, a good strategy is to combine prompt sets 1-2 and 7, while excluding the very long essays from set 3-6. The following command builds a combined dataset with a 1024 token limit.
 
-The ASAPPP dataset consists of three different prompt sets with different scoring ranges:
-
-### Prompts 1-2 (Score range: 2-12)
 ```bash
-python dataset/build_asappp_dataset.py \
-  --prompt-set 1-2 \
-  --output-dir data/asappp \
-  --num-aug 1
-```
-
-### Prompts 3-6 (Score range: 0-4)
-```bash
-python dataset/build_asappp_dataset.py \
-  --prompt-set 3-6 \
-  --output-dir data/asappp \
-  --num-aug 1
-```
-
-### Prompt 7 (Score range: 2-24)
-```bash
-python dataset/build_asappp_dataset.py \
-  --prompt-set 7 \
-  --output-dir data/asappp \
-  --num-aug 1
-```
-
-### Build All Datasets
-```bash
+# This will create a dataset in `data/asappp_combined` from prompts 1-2 and 7.
 python dataset/build_asappp_dataset.py \
   --prompt-set all \
-  --output-dir data/asappp \
-  --num-aug 1
+  --output-dir data/asappp_combined \
+  --max-tokens 1024
 ```
 
-**Note**: Building the datasets requires an active internet connection and HuggingFace authentication to download from the Hub.
-
-## Training
-
-### Quick Start (Prompts 1-2)
+### Building a Smaller Dataset for Experiments
+You can limit the number of training essays to create smaller datasets for experiments, such as plotting a learning curve.
 
 ```bash
-python train_aes_m1.py \
-  --data-path data/asappp_prompts_1-2 \
-  --batch-size 16 \
-  --epochs 5000 \
-  --lr 3e-4 \
-  --d-model 128 \
-  --d-hidden 256 \
-  --n-heads 4 \
-  --n-layers 2 \
-  --h-cycles 2 \
-  --l-cycles 3 \
-  --eval-interval 250 \
-  --checkpoint-path checkpoints/prompts_1-2 \
-  --seed 42
+# Creates a training set with only 1000 unique essays
+python dataset/build_asappp_dataset.py \
+  --prompt-set all \
+  --output-dir data/asappp_combined_1k \
+  --max-tokens 1024 \
+  --limit-train-essays 1000
 ```
 
-### Training with Weights & Biases Logging
+## 2. Training
+
+We now have two specialized training scripts depending on your hardware.
+
+### A) On Apple Silicon (M1/M2/M3/M4)
+
+Use the `train_aes_m2_regression.py` script. This is optimized for the MPS backend.
 
 ```bash
-# First, login to wandb
-wandb login
-
-# Then train with logging
-python train_aes_m1.py \
-  --data-path data/asappp_prompts_1-2 \
-  --batch-size 16 \
-  --epochs 5000 \
+python train_aes_m2_regression.py \
+  --data-path data/asappp_combined \
+  --eval-interval 5 \
   --use-wandb \
-  --project-name TinyRecursiveModels-AES \
-  --run-name prompts_1-2_experiment
+  --project-name "AES-M2-Training"
 ```
+*   The script will automatically use the recommended default hyperparameters (e.g., `hidden_size=768`, `lr=1e-5`, `dropout=0.1`).
+*   The batch size is small (`--batch-size 8`) to accommodate the memory constraints of typical Mac devices.
 
-### Training on Different Prompt Sets
+### B) On Multi-GPU NVIDIA System (H100/H200)
 
-**Prompts 3-6:**
-```bash
-python train_aes_m1.py \
-  --data-path data/asappp_prompts_3-6 \
-  --batch-size 16 \
-  --epochs 5000 \
-  --checkpoint-path checkpoints/prompts_3-6
-```
+Use the `train_aes_h200_regression.py` script. This script uses Distributed Data Parallel (DDP) and Automatic Mixed Precision (AMP) for maximum performance.
 
-**Prompt 7:**
-```bash
-python train_aes_m1.py \
-  --data-path data/asappp_prompts_7 \
-  --batch-size 16 \
-  --epochs 5000 \
-  --checkpoint-path checkpoints/prompts_7
-```
-
-### Memory-Constrained Training
-
-If you encounter memory issues, reduce these parameters:
+You must launch it with `torchrun`, specifying the number of GPUs you want to use.
 
 ```bash
-python train_aes_m1.py \
-  --data-path data/asappp_prompts_1-2 \
-  --batch-size 8 \        # Reduced batch size
-  --d-model 96 \          # Smaller embedding dimension
-  --d-hidden 192 \        # Smaller hidden dimension
-  --n-heads 3 \           # Fewer attention heads
-  --h-cycles 1 \          # Fewer high-level cycles
-  --l-cycles 2            # Fewer low-level cycles
+# For a 2-GPU system
+torchrun --nproc_per_node=2 train_aes_h200_regression.py \
+  --data-path data/asappp_combined \
+  --eval-interval 5 \
+  --use-wandb \
+  --project-name "AES-H200-Training"
+```
+*   This script uses a much larger per-GPU batch size (`--batch-size 128`) to leverage the available VRAM.
+
+## 3. Evaluation
+
+You can evaluate any saved checkpoint using the `evaluate_aes.py` script.
+
+```bash
+python evaluate_aes.py \
+  --checkpoint checkpoints/aes_h200_regression/best_model_h200_regression.pt \
+  --data-path data/asappp_combined
 ```
 
-## Model Architecture
+## Model Architecture (Current Version)
 
-The model uses a recursive reasoning approach adapted for essay scoring:
+The current model is a sophisticated, 37M parameter regression model.
 
-1. **Input Encoding**: Essays are tokenized at the character level (max 512 chars)
-2. **Recursive Reasoning**: 
-   - H-cycles: High-level reasoning iterations (default: 2)
-   - L-cycles: Low-level latent state updates per H-cycle (default: 3)
-3. **Score Prediction**: Final answer state is decoded into a score bin
-4. **Output**: Discretized score that is denormalized to the original scale
-
-### Key Parameters
-
-- `d_model`: Embedding dimension (default: 128)
-- `d_hidden`: Hidden layer dimension (default: 256)
-- `n_heads`: Number of attention heads (default: 4)
-- `n_layers`: Number of encoder layers (default: 2)
-- `h_cycles`: High-level reasoning cycles (default: 2)
-- `l_cycles`: Low-level reasoning cycles (default: 3)
-
-### Model Size
-
-With default parameters:
-- Total parameters: ~1-2M (much smaller than typical essay scoring models)
-- Memory usage: ~4-6GB during training (fits comfortably in 16GB)
-- Training time: ~2-4 hours for 5000 epochs on M1 Mac
+1.  **Input**: Essays and their prompts are combined and tokenized using a `bert-base-uncased` tokenizer up to a sequence length of 1024 tokens.
+2.  **Embeddings**: The model uses a large token embedding layer (`~30k vocab * 768 hidden_size`) initialized with pre-trained weights from BERT.
+3.  **Recursive Reasoning**: The core TRM architecture with H-cycles and L-cycles processes the token sequence to produce a final hidden state. Dropout is used for regularization.
+4.  **Output**: A single regression head predicts a continuous score based on the model's final state.
+5.  **Loss Function**: The model is trained using Mean Squared Error (MSE) loss.
 
 ## Evaluation Metrics
 
-The model is evaluated using standard AES metrics:
+The primary metric for this task is **QWK (Quadratic Weighted Kappa)**, which measures the agreement between the model's predictions and the human raters. We also track RMSE, accuracy, and other metrics.
 
-1. **QWK (Quadratic Weighted Kappa)**: Primary metric, measures agreement with human raters
-2. **MSE (Mean Squared Error)**: Measures prediction accuracy
-3. **RMSE (Root Mean Squared Error)**: Square root of MSE
-4. **Accuracy**: Exact match with ground truth scores
-5. **Adjacent Accuracy**: Predictions within ±1 of ground truth (common in AES)
-
-### Interpreting Results
-
-- **QWK**: 
-  - < 0.40: Poor agreement
-  - 0.40-0.60: Moderate agreement
-  - 0.60-0.80: Substantial agreement
-  - > 0.80: Almost perfect agreement
-  
-- **Adjacent Accuracy**: Typically 80-95% for good AES systems
-
-## Project Structure
-
-```
-TinyRecursiveModelsAES/
-├── dataset/
-│   ├── build_asappp_dataset.py    # ASAPPP dataset builder
-│   ├── build_arc_dataset.py        # Original ARC dataset builder
-│   └── common.py                   # Dataset utilities
-├── evaluators/
-│   └── aes_evaluator.py            # AES evaluation metrics
-├── models/
-│   ├── recursive_reasoning/        # TRM model implementations
-│   ├── ema.py                      # Exponential Moving Average
-│   └── layers.py                   # Model layers
-├── config/
-│   ├── cfg_aes.yaml               # AES training configuration
-│   └── cfg_pretrain.yaml          # Original pretrain config
-├── checkpoints/                    # Saved model checkpoints
-├── data/                          # Processed datasets
-├── train_aes_m1.py                # M1-optimized training script
-├── pretrain.py                    # Original training script
-├── puzzle_dataset.py              # Dataset loading utilities
-├── requirements.txt               # Python dependencies
-├── README.md                      # Original TRM README
-└── README_AES.md                  # This file
-```
-
-## Tips for M1 Mac
-
-### Optimizing Performance
-
-1. **Use MPS backend**: The code automatically detects and uses MPS for M1 acceleration
-2. **Monitor memory**: Use Activity Monitor to check memory usage
-3. **Adjust batch size**: Reduce if you see memory pressure
-4. **Close other apps**: Free up RAM for training
-5. **Keep Mac plugged in**: Training is power-intensive
-
-### Troubleshooting
-
-**MPS not available:**
-```python
-# Check if MPS is available
-import torch
-print(torch.backends.mps.is_available())  # Should return True
-print(torch.backends.mps.is_built())      # Should return True
-```
-
-**Out of memory:**
-- Reduce `--batch-size`
-- Reduce `--d-model` and `--d-hidden`
-- Reduce `--h-cycles` and `--l-cycles`
-- Close other applications
-
-**Slow training:**
-- Ensure Mac is plugged in (performance throttles on battery)
-- Check Activity Monitor for CPU/Memory pressure
-- Reduce `num_workers` in DataLoader (set to 0)
-
-## Differences from Original TRM
-
-| Aspect | Original TRM | AES Adaptation |
-|--------|-------------|----------------|
-| Task | Puzzle solving (ARC-AGI) | Essay scoring |
-| Input | Grid patterns | Character-level text |
-| Output | Grid transformations | Score bins |
-| Vocab Size | ~10-20 | 256 (ASCII) |
-| Sequence Length | Variable | Fixed (512) |
-| Loss Function | Cross-entropy on pixels | Cross-entropy on score bins |
-| Evaluation | Accuracy | QWK, MSE, Adjacent Acc |
-| Augmentation | Dihedral transforms | Simple repetition |
-| Hardware | Multi-GPU (CUDA) | Single M1 Mac (MPS) |
-| Batch Size | 32-128 | 8-16 |
-| Model Size | 7M params | 1-2M params |
-
-## Expected Results
-
-Based on the ASAPPP dataset benchmarks:
-
-### Prompts 1-2
-- Target QWK: 0.70-0.80
-- Training time: ~2-3 hours
-- Dataset size: ~1,800 training essays
-
-### Prompts 3-6
-- Target QWK: 0.65-0.75
-- Training time: ~2-3 hours
-- Dataset size: ~1,600 training essays
-
-### Prompt 7
-- Target QWK: 0.65-0.75
-- Training time: ~2-3 hours
-- Dataset size: ~1,600 training essays
-
-*Note: These are approximate targets. Results may vary based on hyperparameters and random initialization.*
-
-## Future Improvements
-
-1. **Better Tokenization**: Use word-piece or BPE instead of character-level
-2. **Larger Context**: Support longer essays (>512 characters)
-3. **Trait Scoring**: Predict individual trait scores (content, organization, etc.)
-4. **Cross-Prompt Learning**: Train on multiple prompts simultaneously
-5. **Ensemble Methods**: Combine multiple models for better predictions
-6. **Data Augmentation**: More sophisticated text augmentation techniques
-7. **Pretrained Embeddings**: Initialize with pretrained character/word embeddings
-
-## Citation
-
-If you use this code, please cite the original TRM paper:
-
-```bibtex
-@misc{jolicoeurmartineau2025morerecursivereasoningtiny,
-      title={Less is More: Recursive Reasoning with Tiny Networks}, 
-      author={Alexia Jolicoeur-Martineau},
-      year={2025},
-      eprint={2510.04871},
-      archivePrefix={arXiv},
-      primaryClass={cs.LG},
-      url={https://arxiv.org/abs/2510.04871}, 
-}
-```
-
-And the ASAPPP dataset:
-
-```bibtex
-@misc{asappp,
-      title={ASAP Automated Essay Scoring},
-      author={The Hewlett Foundation},
-      year={2012},
-      url={https://www.kaggle.com/c/asap-aes},
-}
-```
-
-## License
-
-This project inherits the license from the original Tiny Recursive Models repository.
-
-## Acknowledgments
-
-- Original TRM implementation by Alexia Jolicoeur-Martineau
-- ASAPPP dataset provided by The Hewlett Foundation via Kaggle
-- HuggingFace for hosting the datasets
-- Apple for the excellent M1 hardware and MPS backend
-
-## Support
-
-For issues specific to:
-- **AES adaptation**: Open an issue in this repository
-- **Original TRM**: Refer to the [original TRM repository](https://github.com/AlexiaJM/TinyRecursiveModels)
-- **ASAPPP dataset**: Check the [HuggingFace dataset page](https://huggingface.co/datasets/llm-aes)
-
-## Contact
-
-For questions or suggestions about this AES adaptation, please open an issue in the repository.
