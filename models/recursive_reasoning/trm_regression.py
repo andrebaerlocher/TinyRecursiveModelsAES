@@ -147,10 +147,28 @@ class TinyRecursiveReasoningModel_ACTV1_Inner(nn.Module):
             self.q_head.weight.zero_()
             self.q_head.bias.fill_(-5)
 
-    def _input_embeddings(self, input: torch.Tensor):
+    def _input_embeddings(self, input: torch.Tensor, puzzle_identifiers: torch.Tensor):
+        # Token embedding
         embedding = self.embed_tokens(input.to(torch.int32))
+
+        # Puzzle embeddings
+        if self.config.puzzle_emb_ndim > 0:
+            puzzle_embedding = self.puzzle_emb(puzzle_identifiers)
+            
+            # This calculation is for a fixed puzzle_emb_len, which is not used here, but we keep the logic
+            puzzle_emb_len = -(self.config.puzzle_emb_ndim // -self.config.hidden_size)
+            pad_count = puzzle_emb_len * self.config.hidden_size - puzzle_embedding.shape[-1]
+            if pad_count > 0:
+                puzzle_embedding = F.pad(puzzle_embedding, (0, pad_count))
+
+            embedding = torch.cat((puzzle_embedding.view(-1, puzzle_emb_len, self.config.hidden_size), embedding), dim=-2)
+
+        # Position embeddings
         if self.config.pos_encodings == "learned":
+            # scale by 1/sqrt(2) to maintain forward variance
             embedding = 0.707106781 * (embedding + self.embed_pos.embedding_weight.to(self.forward_dtype))
+
+        # Scale
         return self.embed_scale * embedding
 
     def empty_carry(self, batch_size: int):
@@ -170,7 +188,7 @@ class TinyRecursiveReasoningModel_ACTV1_Inner(nn.Module):
             cos_sin=self.rotary_emb() if hasattr(self, "rotary_emb") else None,
         )
 
-        input_embeddings = self._input_embeddings(batch["inputs"])
+        input_embeddings = self._input_embeddings(batch["inputs"], batch["puzzle_identifiers"])
 
         z_H, z_L = carry.z_H, carry.z_L
         with torch.no_grad():
